@@ -3,7 +3,8 @@ Configuration management for the trading bot
 """
 import os
 from typing import Dict, List, Optional
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings
+from pydantic import Field
 from enum import Enum
 
 class TradingMode(str, Enum):
