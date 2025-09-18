@@ -41,18 +41,25 @@ class MarketDataCollector:
         """Initialize exchange connection"""
         try:
             exchange_class = getattr(ccxt, settings.exchange_name)
-            self.exchange = exchange_class({
-                'apiKey': settings.api_key,
-                'secret': settings.api_secret,
-                'sandbox': settings.sandbox,
-                'enableRateLimit': True,
-                'timeout': 30000,
-            })
             
-            if settings.trading_mode == "paper":
+            # For paper trading, use public endpoints without API keys
+            if settings.trading_mode in ["paper", "paper_enhanced"]:
+                self.exchange = exchange_class({
+                    'enableRateLimit': True,
+                    'timeout': 30000,
+                })
                 self.exchange.set_sandbox_mode(True)
-            
-            logger.info(f"Initialized {settings.exchange_name} exchange")
+                logger.info(f"Initialized {settings.exchange_name} exchange for paper trading (public endpoints)")
+            else:
+                # For live trading, use API keys
+                self.exchange = exchange_class({
+                    'apiKey': settings.api_key,
+                    'secret': settings.api_secret,
+                    'sandbox': settings.sandbox,
+                    'enableRateLimit': True,
+                    'timeout': 30000,
+                })
+                logger.info(f"Initialized {settings.exchange_name} exchange for live trading")
             
         except Exception as e:
             logger.error(f"Failed to initialize exchange: {e}")

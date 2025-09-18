@@ -28,7 +28,8 @@ COPY . .
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/logs /app/models /app/data /app/static /app/logs/trading /app/logs/risk /app/logs/market_data /app/logs/ml /app/logs/dashboard /app/logs/errors /app/logs/debug && \
-    chmod -R 777 /app/logs
+    chmod -R 777 /app/logs && \
+    chown -R trading:trading /app/logs
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash trading && \
@@ -42,7 +43,7 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/account || exit 1
+    CMD curl -f http://localhost:8000/health-enhanced || exit 1
 
 # Default command
 CMD ["python", "main.py", "--mode", "bot"]
