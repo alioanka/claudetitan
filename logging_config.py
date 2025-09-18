@@ -124,70 +124,110 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "logs"):
 def configure_module_loggers(log_dir: str, timestamp: str):
     """Configure specific loggers for different modules"""
     
-    # Trading strategies logger
+    # Trading strategies logger - with fallback to console if permission denied
     strategy_logger = logging.getLogger('trading_strategies')
-    strategy_handler = logging.handlers.RotatingFileHandler(
-        os.path.join(log_dir, f"strategies_{timestamp}.log"),
-        maxBytes=5*1024*1024,
-        backupCount=3,
-        encoding='utf-8'
-    )
-    strategy_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
-    ))
-    strategy_logger.addHandler(strategy_handler)
+    try:
+        strategy_handler = logging.handlers.RotatingFileHandler(
+            os.path.join(log_dir, f"strategies_{timestamp}.log"),
+            maxBytes=5*1024*1024,
+            backupCount=3,
+            encoding='utf-8'
+        )
+        strategy_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        ))
+        strategy_logger.addHandler(strategy_handler)
+    except PermissionError:
+        print(f"Warning: Cannot write to strategies log file, falling back to console logging")
+        strategy_handler = logging.StreamHandler()
+        strategy_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        ))
+        strategy_logger.addHandler(strategy_handler)
     
-    # Risk management logger
+    # Risk management logger - with fallback to console if permission denied
     risk_logger = logging.getLogger('risk_management')
-    risk_handler = logging.handlers.RotatingFileHandler(
-        os.path.join(log_dir, f"risk_management_{timestamp}.log"),
-        maxBytes=5*1024*1024,
-        backupCount=3,
-        encoding='utf-8'
-    )
-    risk_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
-    ))
-    risk_logger.addHandler(risk_handler)
+    try:
+        risk_handler = logging.handlers.RotatingFileHandler(
+            os.path.join(log_dir, f"risk_management_{timestamp}.log"),
+            maxBytes=5*1024*1024,
+            backupCount=3,
+            encoding='utf-8'
+        )
+        risk_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        ))
+        risk_logger.addHandler(risk_handler)
+    except PermissionError:
+        print(f"Warning: Cannot write to risk management log file, falling back to console logging")
+        risk_handler = logging.StreamHandler()
+        risk_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        ))
+        risk_logger.addHandler(risk_handler)
     
-    # Market data logger
+    # Market data logger - with fallback to console if permission denied
     market_logger = logging.getLogger('market_data')
-    market_handler = logging.handlers.RotatingFileHandler(
-        os.path.join(log_dir, f"market_data_{timestamp}.log"),
-        maxBytes=5*1024*1024,
-        backupCount=3,
-        encoding='utf-8'
-    )
-    market_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
-    ))
-    market_logger.addHandler(market_handler)
+    try:
+        market_handler = logging.handlers.RotatingFileHandler(
+            os.path.join(log_dir, f"market_data_{timestamp}.log"),
+            maxBytes=5*1024*1024,
+            backupCount=3,
+            encoding='utf-8'
+        )
+        market_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        ))
+        market_logger.addHandler(market_handler)
+    except PermissionError:
+        print(f"Warning: Cannot write to market data log file, falling back to console logging")
+        market_handler = logging.StreamHandler()
+        market_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        ))
+        market_logger.addHandler(market_handler)
     
-    # ML module logger
+    # ML module logger - with fallback to console if permission denied
     ml_logger = logging.getLogger('ml_module')
-    ml_handler = logging.handlers.RotatingFileHandler(
-        os.path.join(log_dir, f"ml_module_{timestamp}.log"),
-        maxBytes=10*1024*1024,
-        backupCount=3,
-        encoding='utf-8'
-    )
-    ml_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
-    ))
-    ml_logger.addHandler(ml_handler)
+    try:
+        ml_handler = logging.handlers.RotatingFileHandler(
+            os.path.join(log_dir, f"ml_module_{timestamp}.log"),
+            maxBytes=10*1024*1024,
+            backupCount=3,
+            encoding='utf-8'
+        )
+        ml_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        ))
+        ml_logger.addHandler(ml_handler)
+    except PermissionError:
+        print(f"Warning: Cannot write to ML module log file, falling back to console logging")
+        ml_handler = logging.StreamHandler()
+        ml_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        ))
+        ml_logger.addHandler(ml_handler)
     
-    # Dashboard logger
+    # Dashboard logger - with fallback to console if permission denied
     dashboard_logger = logging.getLogger('dashboard')
-    dashboard_handler = logging.handlers.RotatingFileHandler(
-        os.path.join(log_dir, f"dashboard_{timestamp}.log"),
-        maxBytes=5*1024*1024,
-        backupCount=3,
-        encoding='utf-8'
-    )
-    dashboard_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
-    ))
-    dashboard_logger.addHandler(dashboard_handler)
+    try:
+        dashboard_handler = logging.handlers.RotatingFileHandler(
+            os.path.join(log_dir, f"dashboard_{timestamp}.log"),
+            maxBytes=5*1024*1024,
+            backupCount=3,
+            encoding='utf-8'
+        )
+        dashboard_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        ))
+        dashboard_logger.addHandler(dashboard_handler)
+    except PermissionError:
+        print(f"Warning: Cannot write to dashboard log file, falling back to console logging")
+        dashboard_handler = logging.StreamHandler()
+        dashboard_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        ))
+        dashboard_logger.addHandler(dashboard_handler)
 
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance for a specific module"""
