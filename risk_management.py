@@ -279,7 +279,7 @@ class RiskManager:
                 total_unrealized_pnl_pct=total_unrealized_pnl_pct,
                 daily_pnl=daily_pnl,
                 daily_pnl_pct=daily_pnl_pct,
-                max_drawdown=max_drawdown,
+                max_drawdown=self.max_drawdown,
                 max_drawdown_pct=max_drawdown_pct,
                 sharpe_ratio=sharpe_ratio,
                 var_95=var_95,

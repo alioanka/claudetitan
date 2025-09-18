@@ -9,6 +9,7 @@ from enum import Enum
 
 class TradingMode(str, Enum):
     PAPER = "paper"
+    PAPER_ENHANCED = "paper_enhanced"
     LIVE = "live"
 
 class RiskLevel(str, Enum):
@@ -17,6 +18,8 @@ class RiskLevel(str, Enum):
     AGGRESSIVE = "aggressive"
 
 class Settings(BaseSettings):
+    model_config = {"protected_namespaces": ("settings_",)}
+    
     # Trading Configuration
     trading_mode: TradingMode = TradingMode.PAPER
     risk_level: RiskLevel = RiskLevel.MODERATE
@@ -57,7 +60,7 @@ class Settings(BaseSettings):
     # Trading Pairs
     trading_pairs: List[str] = [
         "BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT", "SOL/USDT",
-        "XRP/USDT", "DOT/USDT", "AVAX/USDT", "MATIC/USDT", "LINK/USDT"
+        "XRP/USDT", "DOT/USDT", "AVAX/USDT", "LINK/USDT", "UNI/USDT"
     ]
     
     # Timeframes

@@ -584,7 +584,7 @@
 
         async function loadAccountData() {
             try {
-                const response = await fetch('/api/account');
+                const response = await fetch('/api/enhanced/account');
                 const data = await response.json();
                 updateAccountData(data);
             } catch (error) {
@@ -679,7 +679,7 @@
 
         async function loadPositions() {
             try {
-                const response = await fetch('/api/positions');
+                const response = await fetch('/api/enhanced/positions');
                 const data = await response.json();
                 displayPositions(data.positions);
             } catch (error) {
@@ -735,7 +735,7 @@
 
         async function loadOrders() {
             try {
-                const response = await fetch('/api/orders');
+                const response = await fetch('/api/enhanced/orders');
                 const data = await response.json();
                 displayOrders(data.orders);
             } catch (error) {
@@ -773,7 +773,7 @@
 
         async function loadMarketData() {
             try {
-                const response = await fetch('/api/market-data');
+                const response = await fetch('/api/enhanced/market-data');
                 const data = await response.json();
                 displayMarketData(data);
             } catch (error) {
@@ -810,7 +810,7 @@
 
         async function loadPerformance() {
             try {
-                const response = await fetch('/api/performance');
+                const response = await fetch('/api/enhanced/performance');
                 const data = await response.json();
                 displayPerformance(data);
             } catch (error) {
@@ -846,7 +846,7 @@
 
         async function loadMLModels() {
             try {
-                const response = await fetch('/api/ml-models');
+                const response = await fetch('/api/enhanced/ml-models');
                 const data = await response.json();
                 displayMLModels(data);
             } catch (error) {
@@ -921,7 +921,7 @@
         async function closePosition(symbol) {
             if (confirm(`Are you sure you want to close position ${symbol}?`)) {
                 try {
-                    const response = await fetch(`/api/close-position/${symbol}`, {
+                    const response = await fetch(`/api/enhanced/close-position/${symbol}`, {
                         method: 'POST'
                     });
                     
@@ -942,7 +942,7 @@
             if (confirm('Are you sure you want to retrain all ML models? This may take several minutes.')) {
                 try {
                     showAlert('Retraining models...', 'info');
-                    const response = await fetch('/api/retrain-models', {
+                    const response = await fetch('/api/enhanced/retrain-models', {
                         method: 'POST'
                     });
                     
@@ -970,7 +970,7 @@
             };
             
             try {
-                const response = await fetch('/api/trading-config', {
+                const response = await fetch('/api/enhanced/trading-config', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
