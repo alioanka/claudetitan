@@ -27,7 +27,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p /app/logs /app/models /app/data /app/static
+RUN mkdir -p /app/logs /app/models /app/data /app/static /app/logs/trading /app/logs/risk /app/logs/market_data /app/logs/ml /app/logs/dashboard /app/logs/errors /app/logs/debug
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash trading && \

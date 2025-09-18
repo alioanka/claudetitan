@@ -18,15 +18,9 @@ from risk_management import RiskManager
 from trading_strategies import StrategyEnsemble
 from dashboard import app
 
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper()),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('trading_bot.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+# Configure advanced logging
+from logging_config import setup_logging, get_logger
+setup_logging(settings.log_level, "logs")
 
 logger = logging.getLogger(__name__)
 

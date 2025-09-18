@@ -2,6 +2,7 @@
 Web Dashboard for Trading Bot
 """
 import logging
+from logging_config import get_logger
 import asyncio
 import json
 from typing import Dict, List, Optional
@@ -21,7 +22,7 @@ from market_data import MarketDataCollector
 from ml_module import MLModelTrainer
 from risk_management import RiskManager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Pydantic models for API
 class LoginRequest(BaseModel):
