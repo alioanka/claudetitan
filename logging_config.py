@@ -44,35 +44,53 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "logs"):
     error_log_file = os.path.join(log_dir, f"trading_bot_errors_{timestamp}.log")
     debug_log_file = os.path.join(log_dir, f"trading_bot_debug_{timestamp}.log")
     
-    # Main log file (all levels)
-    main_handler = logging.handlers.RotatingFileHandler(
-        main_log_file,
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5,
-        encoding='utf-8'
-    )
-    main_handler.setLevel(logging.INFO)
-    main_handler.setFormatter(detailed_formatter)
+    # Main log file (all levels) - with fallback to console if permission denied
+    try:
+        main_handler = logging.handlers.RotatingFileHandler(
+            main_log_file,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        main_handler.setLevel(logging.INFO)
+        main_handler.setFormatter(detailed_formatter)
+    except PermissionError:
+        print(f"Warning: Cannot write to log file {main_log_file}, falling back to console logging")
+        main_handler = logging.StreamHandler()
+        main_handler.setLevel(logging.INFO)
+        main_handler.setFormatter(detailed_formatter)
     
-    # Error log file (ERROR and CRITICAL only)
-    error_handler = logging.handlers.RotatingFileHandler(
-        error_log_file,
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    error_handler.setLevel(logging.ERROR)
-    error_handler.setFormatter(detailed_formatter)
+    # Error log file (ERROR and CRITICAL only) - with fallback to console if permission denied
+    try:
+        error_handler = logging.handlers.RotatingFileHandler(
+            error_log_file,
+            maxBytes=5*1024*1024,  # 5MB
+            backupCount=3,
+            encoding='utf-8'
+        )
+        error_handler.setLevel(logging.ERROR)
+        error_handler.setFormatter(detailed_formatter)
+    except PermissionError:
+        print(f"Warning: Cannot write to error log file {error_log_file}, falling back to console logging")
+        error_handler = logging.StreamHandler()
+        error_handler.setLevel(logging.ERROR)
+        error_handler.setFormatter(detailed_formatter)
     
-    # Debug log file (all levels including DEBUG)
-    debug_handler = logging.handlers.RotatingFileHandler(
-        debug_log_file,
-        maxBytes=20*1024*1024,  # 20MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    debug_handler.setLevel(logging.DEBUG)
-    debug_handler.setFormatter(detailed_formatter)
+    # Debug log file (all levels including DEBUG) - with fallback to console if permission denied
+    try:
+        debug_handler = logging.handlers.RotatingFileHandler(
+            debug_log_file,
+            maxBytes=20*1024*1024,  # 20MB
+            backupCount=3,
+            encoding='utf-8'
+        )
+        debug_handler.setLevel(logging.DEBUG)
+        debug_handler.setFormatter(detailed_formatter)
+    except PermissionError:
+        print(f"Warning: Cannot write to debug log file {debug_log_file}, falling back to console logging")
+        debug_handler = logging.StreamHandler()
+        debug_handler.setLevel(logging.DEBUG)
+        debug_handler.setFormatter(detailed_formatter)
     
     # Console handler
     console_handler = logging.StreamHandler()
