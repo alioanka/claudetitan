@@ -1,0 +1,132 @@
+version: '3.8'
+
+name: trading-bot-enhanced
+
+services:
+  trading-bot-enhanced:
+    build: .
+    container_name: trading-bot-enhanced
+    restart: unless-stopped
+    ports:
+      - "8002:8000"
+    environment:
+      - TRADING_MODE=paper_enhanced
+      - RISK_LEVEL=moderate
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DATABASE_URL=postgresql://trading_enhanced:enhanced_password@trading-postgres:5433/trading_bot_enhanced
+      - REDIS_URL=redis://trading-redis:6380/1
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./trading-data:/app/data
+      - ./trading-logs:/app/logs
+      - ./trading-models:/app/models
+      - ./.env:/app/.env:ro
+    depends_on:
+      - trading-redis
+      - trading-postgres
+    networks:
+      - trading-network-enhanced
+    command: ["python", "main.py", "--mode", "bot"]
+
+  trading-dashboard:
+    build: .
+    container_name: trading-dashboard-enhanced
+    restart: unless-stopped
+    ports:
+      - "8003:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DATABASE_URL=postgresql://trading_enhanced:enhanced_password@trading-postgres:5433/trading_bot_enhanced
+      - REDIS_URL=redis://trading-redis:6380/1
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./trading-data:/app/data
+      - ./trading-logs:/app/logs
+      - ./trading-models:/app/models
+      - ./.env:/app/.env:ro
+    depends_on:
+      - trading-redis
+      - trading-postgres
+    networks:
+      - trading-network-enhanced
+    command: ["python", "main.py", "--mode", "dashboard"]
+
+  trading-redis:
+    image: redis:7-alpine
+    container_name: trading-redis-enhanced
+    restart: unless-stopped
+    ports:
+      - "6380:6380"
+    volumes:
+      - trading-redis-data:/data
+    networks:
+      - trading-network-enhanced
+    command: redis-server --port 6380 --appendonly yes
+
+  trading-postgres:
+    image: postgres:15-alpine
+    container_name: trading-postgres-enhanced
+    restart: unless-stopped
+    ports:
+      - "5433:5433"
+    environment:
+      - POSTGRES_DB=trading_bot_enhanced
+      - POSTGRES_USER=trading_enhanced
+      - POSTGRES_PASSWORD=enhanced_password
+      - PGPORT=5433
+    volumes:
+      - trading-postgres-data:/var/lib/postgresql/data
+    networks:
+      - trading-network-enhanced
+
+  trading-nginx:
+    image: nginx:alpine
+    container_name: trading-nginx-enhanced
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - trading-dashboard
+    networks:
+      - trading-network-enhanced
+
+  trading-prometheus:
+    image: prom/prometheus:latest
+    container_name: trading-prometheus-enhanced
+    restart: unless-stopped
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - trading-prometheus-data:/prometheus
+    networks:
+      - trading-network-enhanced
+
+  trading-grafana:
+    image: grafana/grafana:latest
+    container_name: trading-grafana-enhanced
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - trading-grafana-data:/var/lib/grafana
+    networks:
+      - trading-network-enhanced
+
+volumes:
+  trading-redis-data:
+  trading-postgres-data:
+  trading-prometheus-data:
+  trading-grafana-data:
+
+networks:
+  trading-network-enhanced:
+    driver: bridge

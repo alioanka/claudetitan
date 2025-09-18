@@ -1,0 +1,42 @@
+# Trading Configuration
+TRADING_MODE=paper
+RISK_LEVEL=moderate
+MAX_POSITIONS=10
+MAX_DAILY_LOSS=0.05
+MAX_POSITION_SIZE=0.1
+
+# Exchange API Keys (for live trading)
+EXCHANGE_NAME=binance
+API_KEY=your_api_key_here
+API_SECRET=your_api_secret_here
+SANDBOX=true
+
+# Database Configuration
+DATABASE_URL=postgresql://trading_enhanced:enhanced_password@localhost:5433/trading_bot_enhanced
+REDIS_URL=redis://localhost:6380/1
+
+# Web Dashboard
+HOST=0.0.0.0
+PORT=8000
+DEBUG=false
+# Note: In Docker, dashboard runs on port 8003 externally
+
+# Security
+SECRET_KEY=your-secret-key-change-this-in-production
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# ML Configuration
+ML_ENABLED=true
+MODEL_RETRAIN_INTERVAL=24
+FEATURE_WINDOW=100
+
+# Risk Management
+STOP_LOSS_PCT=0.02
+TAKE_PROFIT_PCT=0.04
+MAX_LEVERAGE=3.0
+MIN_VOLUME_24H=1000000
+
+# Monitoring
+LOG_LEVEL=INFO
+ENABLE_METRICS=true
+SENTRY_DSN=your_sentry_dsn_here
