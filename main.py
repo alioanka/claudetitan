@@ -57,7 +57,7 @@ class TradingBot:
             self.ml_trainer.load_models()
             
             # Initialize market data collector
-            await self.market_data_collector.initialize_exchange()
+            self.market_data_collector.initialize_exchange()
             
             logger.info("Trading bot initialized successfully")
             
