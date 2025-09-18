@@ -18,7 +18,11 @@ class RiskLevel(str, Enum):
     AGGRESSIVE = "aggressive"
 
 class Settings(BaseSettings):
-    model_config = {"protected_namespaces": ("settings_",)}
+    model_config = {
+        "protected_namespaces": ("settings_",),
+        "env_file": ".env",
+        "case_sensitive": False
+    }
     
     # Trading Configuration
     trading_mode: TradingMode = TradingMode.PAPER
@@ -71,10 +75,6 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     enable_metrics: bool = True
     sentry_dsn: Optional[str] = None
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 # Global settings instance
 settings = Settings()
