@@ -37,8 +37,10 @@ error() {
 # Check if running as root
 check_root() {
     if [[ $EUID -eq 0 ]]; then
-        error "This script should not be run as root"
-        exit 1
+        warning "Running as root is not recommended for security reasons"
+        warning "Consider creating a non-root user for deployment"
+        warning "Continuing with root user..."
+        # exit 1  # Commented out to allow root execution
     fi
 }
 
