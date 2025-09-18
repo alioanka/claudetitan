@@ -27,18 +27,18 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Create non-root user first
-RUN useradd --create-home --shell /bin/bash trading
+RUN useradd --create-home --shell /bin/bash claudetitan
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/logs /app/models /app/data /app/static /app/logs/trading /app/logs/risk /app/logs/market_data /app/logs/ml /app/logs/dashboard /app/logs/errors /app/logs/debug && \
     chmod -R 777 /app/logs && \
-    chown -R trading:trading /app/logs
+    chown -R claudetitan:claudetitan /app/logs
 
 # Set ownership of entire app directory
-RUN chown -R trading:trading /app
+RUN chown -R claudetitan:claudetitan /app
 
 # Switch to non-root user
-USER trading
+USER claudetitan
 
 # Expose port
 EXPOSE 8000
