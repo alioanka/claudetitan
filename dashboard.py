@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from pathlib import Path
+import os
 import uvicorn
 from contextlib import asynccontextmanager
 
