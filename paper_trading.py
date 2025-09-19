@@ -356,7 +356,11 @@ class PaperTradingEngine:
             
             # Update account metrics
             self.account.equity = self.account.balance + total_unrealized_pnl
-            self.account.total_pnl = self.account.equity - self.initial_balance
+            
+            # Calculate total P&L from realized trades
+            realized_pnl = sum(trade['pnl'] for trade in self.trade_outcomes)
+            self.account.total_pnl = realized_pnl + total_unrealized_pnl
+            
             self.account.daily_pnl = total_unrealized_pnl  # Simplified for paper trading
             self.account.updated_at = datetime.now()
             

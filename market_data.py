@@ -143,10 +143,19 @@ class MarketDataCollector:
             
             # Fallback: try to get ticker synchronously
             if self.exchange:
-                ticker = self.exchange.fetch_ticker(symbol)
-                return float(ticker['last']) if ticker and 'last' in ticker else None
+                try:
+                    ticker = self.exchange.fetch_ticker(symbol)
+                    if ticker and 'last' in ticker and ticker['last'] is not None:
+                        return float(ticker['last'])
+                    elif ticker and 'close' in ticker and ticker['close'] is not None:
+                        return float(ticker['close'])
+                except Exception as e:
+                    logger.error(f"Error fetching ticker for {symbol}: {e}")
             
+            # If all else fails, return a default price based on entry price
+            logger.warning(f"No current price available for {symbol}, using fallback")
             return None
+            
         except Exception as e:
             logger.error(f"Error getting current price for {symbol}: {e}")
             return None

@@ -38,6 +38,14 @@
         .metric-card span {
             color: #333 !important;
         }
+        /* Specific fixes for account summary elements */
+        #accountBalance, #accountEquity, #totalPnL, #dailyPnL {
+            color: #333 !important;
+            font-weight: bold !important;
+        }
+        .text-muted {
+            color: #666 !important;
+        }
         /* Fix any other white text issues */
         .card-body h4, .card-body h5, .card-body h6 {
             color: #333 !important;
@@ -623,6 +631,28 @@
             const dailyPnLElement = document.getElementById('dailyPnL');
             dailyPnLElement.textContent = `$${data.daily_pnl.toFixed(2)}`;
             dailyPnLElement.className = data.daily_pnl >= 0 ? 'positive' : 'negative';
+            
+            // Update performance chart with current equity
+            updatePerformanceChart(data.equity);
+        }
+        
+        function updatePerformanceChart(currentEquity) {
+            if (performanceChart) {
+                const now = new Date();
+                const timeLabel = now.toLocaleTimeString();
+                
+                // Add new data point
+                performanceChart.data.labels.push(timeLabel);
+                performanceChart.data.datasets[0].data.push(currentEquity);
+                
+                // Keep only last 20 data points
+                if (performanceChart.data.labels.length > 20) {
+                    performanceChart.data.labels.shift();
+                    performanceChart.data.datasets[0].data.shift();
+                }
+                
+                performanceChart.update('none');
+            }
         }
 
         async function loadOverviewData() {
@@ -702,11 +732,23 @@
                 const response = await fetch('/api/enhanced/positions');
                 const data = await response.json();
                 displayPositions(data.positions);
+                updatePositionChart(data.positions);
             } catch (error) {
                 console.error('Error loading positions:', error);
             }
         }
 
+        function updatePositionChart(positions) {
+            if (positionChart && positions.length > 0) {
+                const symbols = positions.map(p => p.symbol);
+                const values = positions.map(p => Math.abs(p.size * p.entry_price));
+                
+                positionChart.data.labels = symbols;
+                positionChart.data.datasets[0].data = values;
+                positionChart.update();
+            }
+        }
+        
         function displayPositions(positions) {
             const container = document.getElementById('positionsContainer');
             container.innerHTML = '';

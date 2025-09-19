@@ -197,6 +197,22 @@ async def get_positions():
                     # Calculate P&L percentage
                     pnl_percentage = (current_pnl / (pos.entry_price * pos.size)) * 100
                     
+                    # Calculate duration with timezone awareness
+                    duration_str = None
+                    timestamp_str = None
+                    if hasattr(pos, 'timestamp') and pos.timestamp:
+                        # Convert to UTC+3 for display (VPS is UTC, browser is UTC+3)
+                        utc_timestamp = pos.timestamp
+                        utc_plus_3 = utc_timestamp + timedelta(hours=3)
+                        timestamp_str = utc_plus_3.isoformat()
+                        
+                        # Calculate duration
+                        now_utc = datetime.now()
+                        duration = now_utc - utc_timestamp
+                        hours, remainder = divmod(duration.total_seconds(), 3600)
+                        minutes, seconds = divmod(remainder, 60)
+                        duration_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+                    
                     # Create updated position dict
                     pos_dict = {
                         'symbol': pos.symbol,
@@ -206,8 +222,9 @@ async def get_positions():
                         'current_price': current_price,
                         'pnl': current_pnl,
                         'pnl_percentage': pnl_percentage,
-                        'timestamp': pos.timestamp.isoformat() if hasattr(pos, 'timestamp') else None,
-                        'duration': str(datetime.now() - pos.timestamp) if hasattr(pos, 'timestamp') else None
+                        'timestamp': timestamp_str,
+                        'duration': duration_str,
+                        'open_time_utc_plus_3': timestamp_str
                     }
                 else:
                     # Fallback to original position data if price unavailable
