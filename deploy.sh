@@ -75,8 +75,14 @@ check_prerequisites() {
 create_directories() {
     log "Creating necessary directories..."
     
-    mkdir -p data logs models ssl static
-    chmod 755 data logs models ssl static
+    # Create all necessary directories
+    mkdir -p data logs models ssl static trading-data trading-logs trading-models
+    
+    # Set proper permissions
+    chmod 755 data logs models ssl static trading-data trading-logs trading-models
+    
+    # Create logs subdirectories
+    mkdir -p logs/trading logs/risk logs/market_data logs/ml logs/dashboard logs/errors logs/debug
     
     success "Directories created"
 }
@@ -85,11 +91,21 @@ create_directories() {
 generate_ssl_certificates() {
     log "Generating SSL certificates..."
     
+    # Ensure ssl directory exists
+    mkdir -p ssl
+    
     if [[ ! -f "ssl/cert.pem" ]] || [[ ! -f "ssl/key.pem" ]]; then
-        openssl req -x509 -newkey rsa:4096 -keyout ssl/key.pem -out ssl/cert.pem -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
-        chmod 600 ssl/key.pem
-        chmod 644 ssl/cert.pem
-        success "SSL certificates generated"
+        # Generate self-signed certificate
+        openssl req -x509 -newkey rsa:4096 -keyout ssl/key.pem -out ssl/cert.pem -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost" 2>/dev/null
+        
+        if [[ -f "ssl/cert.pem" ]] && [[ -f "ssl/key.pem" ]]; then
+            chmod 600 ssl/key.pem
+            chmod 644 ssl/cert.pem
+            success "SSL certificates generated successfully"
+        else
+            error "Failed to generate SSL certificates"
+            exit 1
+        fi
     else
         warning "SSL certificates already exist, skipping generation"
     fi

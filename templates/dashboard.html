@@ -324,8 +324,8 @@
                                     <th>Amount</th>
                                     <th>Price</th>
                                     <th>Status</th>
-                                    <th>Time</th>
-                                    <th>Actions</th>
+                                    <th>P&L</th>
+                                    <th>Duration & Time</th>
                                 </tr>
                             </thead>
                             <tbody id="ordersTableBody">
@@ -762,11 +762,16 @@
                 const positionCard = document.createElement('div');
                 positionCard.className = `position-card ${position.side}`;
                 
-                const pnlClass = position.unrealized_pnl >= 0 ? 'positive' : 'negative';
+                const pnl = position.pnl || 0;
+                const pnlPercentage = position.pnl_percentage || 0;
+                const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+                const currentPrice = position.current_price || position.entry_price;
+                const duration = position.duration || 'N/A';
+                const openTime = position.open_time_utc_plus_3 || position.timestamp || 'N/A';
                 
                 positionCard.innerHTML = `
                     <div class="row align-items-center">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <h6>${position.symbol}</h6>
                             <small class="text-muted">${position.side.toUpperCase()}</small>
                         </div>
@@ -777,16 +782,24 @@
                             <strong>Entry:</strong> $${position.entry_price.toFixed(2)}
                         </div>
                         <div class="col-md-2">
-                            <strong>Current:</strong> $${position.current_price.toFixed(2)}
+                            <strong>Current:</strong> $${currentPrice.toFixed(2)}
                         </div>
                         <div class="col-md-2">
                             <strong>P&L:</strong> 
-                            <span class="${pnlClass}">$${position.unrealized_pnl.toFixed(2)} (${position.unrealized_pnl_pct.toFixed(2)}%)</span>
+                            <span class="${pnlClass}">$${pnl.toFixed(2)} (${pnlPercentage.toFixed(2)}%)</span>
                         </div>
                         <div class="col-md-1">
                             <button class="btn btn-sm btn-danger" onclick="closePosition('${position.symbol}')">
                                 <i class="fas fa-times"></i>
                             </button>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-md-6">
+                            <small class="text-muted"><strong>Opened:</strong> ${openTime}</small>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted"><strong>Duration:</strong> ${duration}</small>
                         </div>
                     </div>
                 `;
@@ -809,23 +822,35 @@
             const tbody = document.getElementById('ordersTableBody');
             tbody.innerHTML = '';
             
+            if (orders.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No recent trades</td></tr>';
+                return;
+            }
+            
             orders.forEach(order => {
                 const row = document.createElement('tr');
                 const statusClass = order.status === 'filled' ? 'success' : 
                                   order.status === 'pending' ? 'warning' : 'danger';
                 
+                // Calculate PnL and duration
+                const pnl = order.pnl || 0;
+                const pnlPercentage = order.pnl_percentage || 0;
+                const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+                const duration = order.duration || 'N/A';
+                const timestamp = order.timestamp || order.created_at;
+                
                 row.innerHTML = `
                     <td>${order.symbol}</td>
                     <td>${order.side}</td>
-                    <td>${order.amount.toFixed(6)}</td>
+                    <td>${order.amount ? order.amount.toFixed(6) : 'N/A'}</td>
                     <td>$${order.filled_price ? order.filled_price.toFixed(2) : order.price || 'N/A'}</td>
                     <td><span class="badge bg-${statusClass}">${order.status}</span></td>
-                    <td>${new Date(order.created_at).toLocaleString()}</td>
                     <td>
-                        ${order.status === 'pending' ? 
-                            `<button class="btn btn-sm btn-danger" onclick="cancelOrder('${order.id}')">Cancel</button>` : 
-                            'N/A'
-                        }
+                        <span class="${pnlClass}">$${pnl.toFixed(2)} (${pnlPercentage.toFixed(2)}%)</span>
+                    </td>
+                    <td>
+                        <small>${duration}</small><br>
+                        <small class="text-muted">${timestamp ? new Date(timestamp).toLocaleString() : 'N/A'}</small>
                     </td>
                 `;
                 
