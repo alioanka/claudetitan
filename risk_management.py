@@ -3,7 +3,7 @@ Advanced Risk Management System for Trading Bot
 """
 import math
 import logging
-from logging_config import get_logger
+from simple_logging import get_logger
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime, timedelta

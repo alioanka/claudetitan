@@ -18,9 +18,9 @@ from risk_management import RiskManager
 from trading_strategies import StrategyEnsemble
 from dashboard import app
 
-# Configure advanced logging
-from logging_config import setup_logging, get_logger
-setup_logging(settings.log_level, "logs")
+# Configure simple logging
+from simple_logging import setup_simple_logging, get_logger
+setup_simple_logging(settings.log_level, "logs")
 
 logger = logging.getLogger(__name__)
 

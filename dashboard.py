@@ -2,12 +2,12 @@
 Web Dashboard for Trading Bot
 """
 import logging
-from logging_config import get_logger
+from simple_logging import get_logger
 import asyncio
 import json
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, status, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -144,9 +144,9 @@ templates = Jinja2Templates(directory="templates")
 
 # API Routes
 @app.get("/", response_class=HTMLResponse)
-async def dashboard():
+async def dashboard(request: Request):
     """Main dashboard page"""
-    return templates.TemplateResponse("dashboard.html", {"request": None})
+    return templates.TemplateResponse("dashboard.html", {"request": request})
 
 @app.get("/health-enhanced")
 async def health_check():
