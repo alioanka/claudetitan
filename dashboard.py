@@ -144,9 +144,9 @@ templates = Jinja2Templates(directory="templates")
 
 # API Routes
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request):
+async def dashboard():
     """Main dashboard page"""
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+    return templates.TemplateResponse("dashboard.html", {"request": None})
 
 @app.get("/health-enhanced")
 async def health_check():

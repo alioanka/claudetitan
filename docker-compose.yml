@@ -20,7 +20,6 @@ services:
       - ./trading-logs:/app/logs
       - ./trading-models:/app/models
       - ./.env:/app/.env:ro
-      - ./logs:/app/logs:rw
     depends_on:
       - trading-redis
       - trading-postgres
@@ -45,7 +44,6 @@ services:
       - ./trading-logs:/app/logs
       - ./trading-models:/app/models
       - ./.env:/app/.env:ro
-      - ./logs:/app/logs:rw
     depends_on:
       - trading-redis
       - trading-postgres
