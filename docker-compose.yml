@@ -12,6 +12,7 @@ services:
       - RISK_LEVEL=moderate
       - HOST=0.0.0.0
       - PORT=8000
+      - LOG_DIR=/app/logs
       - DATABASE_URL=postgresql://trading_enhanced:enhanced_password@trading-postgres:5433/trading_bot_enhanced
       - REDIS_URL=redis://trading-redis:6380/1
       - LOG_LEVEL=INFO
@@ -36,6 +37,7 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=8000
+      - LOG_DIR=/app/logs
       - DATABASE_URL=postgresql://trading_enhanced:enhanced_password@trading-postgres:5433/trading_bot_enhanced
       - REDIS_URL=redis://trading-redis:6380/1
       - LOG_LEVEL=INFO

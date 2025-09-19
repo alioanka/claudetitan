@@ -6,73 +6,85 @@ import os
 from datetime import datetime
 
 def setup_simple_logging(log_level: str = "INFO", log_dir: str = "logs"):
-    """Setup simple logging that works in Docker"""
-    
-    # Try multiple log directory options
-    log_dirs_to_try = [
-        log_dir,
-        "/app/logs",
-        "/tmp/logs",
-        "/tmp"
-    ]
-    
+    """Setup simple logging that works in Docker + captures uvicorn/fastapi."""
+
+    import logging
+    import logging.handlers
+    import os
+    from datetime import datetime
+    from pathlib import Path
+
+    # Allow override via env
+    env_log_dir = os.environ.get("LOG_DIR")
+    if env_log_dir:
+        log_dir = env_log_dir
+
+    # Try multiple locations (first writable wins)
+    log_dirs_to_try = [log_dir, "/app/logs", "/var/log/claudetitan", "/tmp/logs", "/tmp"]
     working_log_dir = None
-    for test_dir in log_dirs_to_try:
+    for candidate in log_dirs_to_try:
         try:
-            os.makedirs(test_dir, exist_ok=True)
-            # Test write access
-            test_file = os.path.join(test_dir, "test_write.tmp")
-            with open(test_file, 'w') as f:
-                f.write("test")
-            os.remove(test_file)
-            working_log_dir = test_dir
-            print(f"Successfully created and tested log directory: {test_dir}")
+            Path(candidate).mkdir(parents=True, exist_ok=True)
+            test_file = Path(candidate) / ".write_test"
+            test_file.write_text("ok", encoding="utf-8")
+            test_file.unlink(missing_ok=True)
+            working_log_dir = candidate
             break
-        except Exception as e:
-            print(f"Could not use log directory {test_dir}: {e}")
+        except Exception:
             continue
-    
-    if not working_log_dir:
-        print("Warning: No writable log directory found, using console only")
-        working_log_dir = None
-    
-    # Get timestamp
-    timestamp = datetime.now().strftime("%Y%m%d")
-    
-    # Configure root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, log_level.upper()))
-    root_logger.handlers.clear()
-    
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    ))
-    root_logger.addHandler(console_handler)
-    
-    # Try to add file handler if we have a working directory
+
+    # Build handlers
+    timestamp = datetime.utcnow().strftime("%Y%m%d")
+    main_log_file = None
+    handlers = []
+
+    # Reset root handlers to avoid duplicates when reloading
+    root = logging.getLogger()
+    for h in list(root.handlers):
+        root.removeHandler(h)
+
     if working_log_dir:
-        try:
-            log_file = os.path.join(working_log_dir, f"trading_bot_{timestamp}.log")
-            file_handler = logging.FileHandler(log_file, encoding='utf-8')
-            file_handler.setLevel(logging.INFO)
-            file_handler.setFormatter(logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
-            ))
-            root_logger.addHandler(file_handler)
-            print(f"✅ Logging to file: {log_file}")
-        except Exception as e:
-            print(f"Warning: Could not create log file: {e}")
-    
-    # Test logging
+        main_log_file = os.path.join(working_log_dir, f"bot_{timestamp}.log")
+        error_log_file = os.path.join(working_log_dir, f"errors_{timestamp}.log")
+        file_handler = logging.handlers.RotatingFileHandler(
+            main_log_file, maxBytes=10*1024*1024, backupCount=5, encoding="utf-8"
+        )
+        file_handler.setFormatter(logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
+        ))
+        error_handler = logging.handlers.RotatingFileHandler(
+            error_log_file, maxBytes=10*1024*1024, backupCount=5, encoding="utf-8"
+        )
+        error_handler.setLevel(logging.WARNING)
+        error_handler.setFormatter(logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
+        ))
+        handlers.extend([file_handler, error_handler])
+
+    # Always keep a console handler for docker logs
+    console = logging.StreamHandler()
+    console.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
+    handlers.append(console)
+
+    # Force clean basicConfig with our handlers
+    logging.basicConfig(level=getattr(logging, log_level.upper(), logging.INFO), handlers=handlers, force=True)
+
+    # Capture uvicorn/fastapi too
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
+        lg = logging.getLogger(name)
+        lg.handlers.clear()
+        for h in handlers:
+            lg.addHandler(h)
+        lg.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+        lg.propagate = False
+
+    # Test
     logger = logging.getLogger(__name__)
-    logger.info("Simple logging setup completed")
+    logger.info("✅ Simple logging setup completed")
     logger.info(f"Log level: {log_level}")
     logger.info(f"Log directory: {working_log_dir or 'console only'}")
+    if working_log_dir:
+        logger.info(f"Main log file: {main_log_file}")
     logger.info("=" * 50)
 
 def get_logger(name: str):

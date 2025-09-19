@@ -157,6 +157,11 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link" href="#recent-positions" onclick="showSection('recent-positions')">
+                                <i class="fas fa-chart-line me-2"></i>Recent Positions
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" href="#market" onclick="showSection('market')">
                                 <i class="fas fa-chart-bar me-2"></i>Market Data
                             </a>
@@ -361,6 +366,37 @@
                     </div>
                 </div>
 
+                <!-- Recent Positions Section -->
+                <div id="recent-positions-section" class="content-section" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4><i class="fas fa-chart-line me-2"></i>Recent Positions</h4>
+                        <button class="btn btn-primary btn-custom" onclick="loadPositionsFromOrders()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Qty</th>
+                                    <th>Entry</th>
+                                    <th>Exit</th>
+                                    <th>P&L</th>
+                                    <th>Duration</th>
+                                    <th>Opened</th>
+                                    <th>Closed</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positionsFromOrdersBody">
+                                <tr><td colspan="10" class="text-center text-muted">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- Market Data Section -->
                 <div id="market-section" class="content-section" style="display: none;">
                     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -516,6 +552,24 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- Pairs Management -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">Tradable Pairs</h5>
+                                    <div>
+                                        <input id="newPairInput" class="form-control d-inline-block" style="width: 180px;" placeholder="e.g. ARB/USDT">
+                                        <button class="btn btn-sm btn-primary" onclick="addPair()">Add</button>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <ul id="pairsList" class="list-group"></ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </main>
         </div>
@@ -612,6 +666,9 @@
                     break;
                 case 'orders':
                     loadOrders();
+                    break;
+                case 'recent-positions':
+                    loadPositionsFromOrders();
                     break;
                 case 'market':
                     loadMarketData();
@@ -791,32 +848,60 @@
             }
         }
         
-        function updateStrategyTable() {
+        async function updateStrategyTable() {
             const tbody = document.getElementById('strategyTableBody');
             if (!tbody) return;
-            
-            // Simulate strategy performance data
-            const strategies = [
-                { name: 'Scalping', trades: 45, winRate: 65, avgPnl: 12.5, totalPnl: 562.5, sharpe: 1.8 },
-                { name: 'Mean Reversion', trades: 32, winRate: 58, avgPnl: 18.2, totalPnl: 582.4, sharpe: 1.4 },
-                { name: 'Trend Following', trades: 28, winRate: 72, avgPnl: 25.8, totalPnl: 722.4, sharpe: 2.1 },
-                { name: 'Momentum', trades: 38, winRate: 68, avgPnl: 15.6, totalPnl: 592.8, sharpe: 1.6 },
-                { name: 'Arbitrage', trades: 22, winRate: 55, avgPnl: 8.9, totalPnl: 195.8, sharpe: 1.2 }
-            ];
-            
-            tbody.innerHTML = '';
-            strategies.forEach(strategy => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td><strong>${strategy.name}</strong></td>
-                    <td>${strategy.trades}</td>
-                    <td><span class="badge bg-success">${strategy.winRate}%</span></td>
-                    <td class="${strategy.avgPnl >= 0 ? 'positive' : 'negative'}">$${strategy.avgPnl.toFixed(2)}</td>
-                    <td class="${strategy.totalPnl >= 0 ? 'positive' : 'negative'}">$${strategy.totalPnl.toFixed(2)}</td>
-                    <td>${strategy.sharpe.toFixed(2)}</td>
-                `;
-                tbody.appendChild(row);
-            });
+
+            try {
+                const resp = await fetch('/api/enhanced/orders');
+                const payload = await resp.json();
+                const orders = payload.orders || [];
+
+                // Group by strategy (fallback to 'Scalping' if absent in Titan)
+                const byStrategy = {};
+                for (const o of orders) {
+                    const strat = (o.strategy || 'Scalping').trim();
+                    if (!byStrategy[strat]) byStrategy[strat] = [];
+                    byStrategy[strat].push(o);
+                }
+
+                const rows = [];
+                Object.entries(byStrategy).forEach(([name, arr]) => {
+                    const pnls = arr.map(a => Number(a.pnl || 0));
+                    const wins = pnls.filter(x => x > 0).length;
+                    const trades = arr.length;
+                    const winRate = trades ? (wins / trades * 100) : 0;
+                    const totalPnl = pnls.reduce((s, x) => s + x, 0);
+                    const avgPnl = trades ? totalPnl / trades : 0;
+
+                    // Naive Sharpe: mean(pnl) / std(pnl), annualization omitted for simplicity
+                    const mean = avgPnl;
+                    const variance = pnls.length ? pnls.reduce((s, x) => s + Math.pow(x - mean, 2), 0) / pnls.length : 0;
+                    const std = Math.sqrt(variance) || 1e-9;
+                    const sharpe = mean / std;
+
+                    rows.push({ name, trades, winRate, avgPnl, totalPnl, sharpe });
+                });
+
+                // Render
+                tbody.innerHTML = '';
+                rows.sort((a,b) => b.totalPnl - a.totalPnl).forEach(strategy => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><strong>${strategy.name}</strong></td>
+                        <td>${strategy.trades}</td>
+                        <td><span class="badge bg-${strategy.winRate >= 50 ? 'success' : 'danger'}">
+                            ${strategy.winRate.toFixed(0)}%</span></td>
+                        <td class="${strategy.avgPnl >= 0 ? 'positive' : 'negative'}">$${strategy.avgPnl.toFixed(2)}</td>
+                        <td class="${strategy.totalPnl >= 0 ? 'positive' : 'negative'}">$${strategy.totalPnl.toFixed(2)}</td>
+                        <td>${strategy.sharpe.toFixed(2)}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (e) {
+                console.error('Strategy table error:', e);
+                // Keep old content if fetch fails
+            }
         }
         
         function initializePnlChart() {
@@ -954,8 +1039,27 @@
                 const pnlPercentage = position.pnl_percentage || 0;
                 const pnlClass = pnl >= 0 ? 'positive' : 'negative';
                 const currentPrice = position.current_price || position.entry_price;
-                const duration = position.duration || 'N/A';
-                const openTime = position.open_time_utc_plus_3 || position.timestamp || 'N/A';
+                
+                // Fix timezone and duration calculation
+                function fmtDuration(ms) {
+                    if (!ms || ms < 0) return 'N/A';
+                    const s = Math.floor(ms/1000);
+                    const h = Math.floor(s/3600);
+                    const m = Math.floor((s%3600)/60);
+                    const r = `${h}h ${m}m`;
+                    return r;
+                }
+
+                const openedAtRaw = position.opened_at || (position.orders && position.orders[0] && position.orders[0].timestamp) || position.timestamp || null;
+                const openedAt = openedAtRaw ? new Date(openedAtRaw) : null;
+
+                let dur = 'N/A';
+                if (openedAt) {
+                    const end = position.closed_at ? new Date(position.closed_at) : new Date();
+                    dur = fmtDuration(end - openedAt);
+                }
+
+                const openTime = openedAt ? openedAt.toLocaleString() : 'N/A';
                 
                 positionCard.innerHTML = `
                     <div class="row align-items-center">
@@ -987,7 +1091,7 @@
                             <small class="text-muted"><strong>Opened:</strong> ${openTime}</small>
                         </div>
                         <div class="col-md-6">
-                            <small class="text-muted"><strong>Duration:</strong> ${duration}</small>
+                            <small class="text-muted"><strong>Duration:</strong> ${dur}</small>
                         </div>
                     </div>
                 `;
@@ -1034,7 +1138,7 @@
                     <td>$${order.filled_price ? order.filled_price.toFixed(2) : order.price || 'N/A'}</td>
                     <td><span class="badge bg-${statusClass}">${order.status}</span></td>
                     <td>
-                        <span class="${pnlClass}">$${pnl.toFixed(2)} (${pnlPercentage.toFixed(2)}%)</span>
+                        <span class="text-muted">—</span>
                     </td>
                     <td>
                         <small>${duration}</small><br>
@@ -1093,8 +1197,52 @@
                 updatePnlChart();
                 updateDrawdownChart();
                 
-                const response = await fetch('/api/enhanced/performance');
-                const data = await response.json();
+                let data = null;
+                try {
+                    const response = await fetch('/api/enhanced/performance');
+                    data = await response.json();
+                } catch (_) {}
+
+                // Fallback: compute from orders if API is empty
+                if (!data || (data.total_trades === 0 && data.total_pnl === 0)) {
+                    const ordersResp = await fetch('/api/enhanced/orders');
+                    const ordersPayload = await ordersResp.json();
+                    const orders = ordersPayload.orders || [];
+
+                    const fills = orders.filter(o => o.status === 'filled');
+                    const pnls  = fills.map(o => Number(o.pnl || 0));
+                    const totalTrades = fills.length;
+                    const wins = pnls.filter(x => x > 0).length;
+                    const totalPnl = pnls.reduce((s,x)=>s+x, 0);
+                    const avgWin = (() => {
+                        const w = pnls.filter(x=>x>0);
+                        return w.length ? w.reduce((s,x)=>s+x,0)/w.length : 0;
+                    })();
+                    const avgLoss = (() => {
+                        const l = pnls.filter(x=>x<0);
+                        return l.length ? l.reduce((s,x)=>s+x,0)/l.length : 0;
+                    })();
+
+                    const equityResp = await fetch('/api/enhanced/account');
+                    const acct = await equityResp.json();
+
+                    data = {
+                        current_equity: Number(acct.equity || acct.balance || 0),
+                        available_balance: Number(acct.available_balance || acct.balance || 0),
+                        initial_balance: Number(acct.initial_balance || 10000),
+                        total_trades: totalTrades,
+                        win_rate: totalTrades ? wins/totalTrades : 0,
+                        total_pnl: totalPnl,
+                        avg_win: avgWin,
+                        avg_loss: avgLoss,
+                        max_drawdown: 0, // could compute from equity history if available
+                        sharpe_ratio: 0, // need equity series to compute accurately
+                        total_return: (Number(acct.equity||0) && Number(acct.initial_balance||0))
+                            ? ((Number(acct.equity)-Number(acct.initial_balance))/Number(acct.initial_balance))*100
+                            : 0
+                    };
+                }
+
                 displayPerformance(data);
             } catch (error) {
                 console.error('Error loading performance:', error);
@@ -1189,6 +1337,9 @@
             document.getElementById('maxPositions').value = 10;
             document.getElementById('maxDailyLoss').value = 0.05;
             document.getElementById('maxPositionSize').value = 0.1;
+            
+            // Load pairs
+            loadPairs();
             
             // Update uptime
             const uptime = Math.floor((new Date() - startTime) / 1000);
@@ -1329,6 +1480,139 @@
             setInterval(() => {
                 loadAccountData();
             }, 30000); // Update every 30 seconds
+        }
+        
+        // Recent Positions functions
+        async function loadPositionsFromOrders() {
+            try {
+                const resp = await fetch('/api/enhanced/orders');
+                const payload = await resp.json();
+                const orders = (payload && payload.orders) || [];
+                const positions = buildPositionsFromOrders(orders);
+                renderPositionsFromOrders(positions);
+            } catch (e) {
+                console.error('loadPositionsFromOrders error', e);
+            }
+        }
+
+        function buildPositionsFromOrders(orders) {
+            // Assumes orders are chronological; pair BUY->SELL for long, SELL->BUY for short
+            const bySymbol = {};
+            orders.forEach(o => {
+                if (!bySymbol[o.symbol]) bySymbol[o.symbol] = [];
+                bySymbol[o.symbol].push(o);
+            });
+
+            const positions = [];
+            Object.values(bySymbol).forEach(list => {
+                let open = null;
+                list.forEach(o => {
+                    if (!open) {
+                        open = o;
+                    } else {
+                        // opposite side closes
+                        if ((open.side === 'buy' && o.side === 'sell') || (open.side === 'sell' && o.side === 'buy')) {
+                            const qty = Math.min(Number(open.amount||0), Number(o.amount||0));
+                            const entry = Number(open.filled_price || open.price || 0);
+                            const exit  = Number(o.filled_price || o.price || 0);
+                            const side  = open.side === 'buy' ? 'long' : 'short';
+                            const pnl   = side === 'long' ? (exit - entry) * qty : (entry - exit) * qty;
+                            const opened_at = open.timestamp || open.created_at || null;
+                            const closed_at = o.timestamp || o.created_at || null;
+                            positions.push({
+                                symbol: o.symbol,
+                                side, qty, entry, exit, pnl,
+                                opened_at, closed_at,
+                                closing_reason: o.closing_reason || o.reason || ''
+                            });
+                            open = null;
+                        } else {
+                            // two buys in a row? treat as DCA; keep earliest as open, or roll forward
+                            // simple approach: replace open with latest
+                            open = o;
+                        }
+                    }
+                });
+            });
+            // newest first
+            positions.sort((a,b) => new Date(b.closed_at||0) - new Date(a.closed_at||0));
+            return positions;
+        }
+
+        function renderPositionsFromOrders(positions) {
+            const tbody = document.getElementById('positionsFromOrdersBody');
+            if (!tbody) return;
+
+            if (!positions.length) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No closed positions yet</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            positions.forEach(p => {
+                const opened = p.opened_at ? new Date(p.opened_at) : null;
+                const closed = p.closed_at ? new Date(p.closed_at) : null;
+                let dur = 'N/A';
+                if (opened && closed) dur = ((closed - opened)/60000).toFixed(0) + ' min';
+
+                const pnlClass = p.pnl >= 0 ? 'positive' : 'negative';
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${p.symbol}</td>
+                    <td>${p.side}</td>
+                    <td>${Number(p.qty||0).toFixed(6)}</td>
+                    <td>$${Number(p.entry||0).toFixed(4)}</td>
+                    <td>$${Number(p.exit||0).toFixed(4)}</td>
+                    <td class="${pnlClass}">$${p.pnl.toFixed(2)}</td>
+                    <td>${dur}</td>
+                    <td>${opened ? opened.toLocaleString() : 'N/A'}</td>
+                    <td>${closed ? closed.toLocaleString() : 'N/A'}</td>
+                    <td>${p.closing_reason || ''}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        // Pairs management functions
+        async function loadPairs() {
+            try {
+                const resp = await fetch('/api/enhanced/pairs');
+                const data = await resp.json();
+                const list = document.getElementById('pairsList');
+                list.innerHTML = '';
+                (data.pairs || []).forEach(p => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                    li.innerHTML = `<span>${p}</span>
+                        <button class="btn btn-sm btn-outline-danger" onclick="removePair('${p}')">
+                            Remove
+                        </button>`;
+                    list.appendChild(li);
+                });
+            } catch(e) { 
+                console.error('loadPairs error', e); 
+            }
+        }
+
+        async function addPair() {
+            const el = document.getElementById('newPairInput');
+            const symbol = (el.value || '').trim();
+            if (!symbol) return;
+            await fetch('/api/enhanced/pairs', {
+                method: 'POST', 
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({symbol})
+            });
+            el.value = '';
+            loadPairs();
+        }
+
+        async function removePair(symbol) {
+            await fetch('/api/enhanced/pairs', {
+                method: 'DELETE', 
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({symbol})
+            });
+            loadPairs();
         }
     </script>
 </body>

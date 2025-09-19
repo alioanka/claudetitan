@@ -304,6 +304,49 @@ async def get_performance():
         logger.error(f"Error getting performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Pairs management
+_PAIRS_FILE = Path(os.environ.get("PAIRS_FILE", "/app/config_pairs.json"))
+
+def _read_pairs():
+    try:
+        if _PAIRS_FILE.exists():
+            return json.loads(_PAIRS_FILE.read_text(encoding="utf-8")).get("pairs", [])
+    except Exception:
+        pass
+    # fallback defaults
+    return ["BTC/USDT","ETH/USDT","SOL/USDT","AVAX/USDT","LINK/USDT","UNI/USDT","DOT/USDT"]
+
+def _write_pairs(pairs):
+    try:
+        _PAIRS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _PAIRS_FILE.write_text(json.dumps({"pairs": pairs}, indent=2), encoding="utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to persist pairs: {e}")
+
+class PairItem(BaseModel):
+    symbol: str
+
+@app.get("/api/enhanced/pairs")
+def get_pairs():
+    return {"pairs": _read_pairs()}
+
+@app.post("/api/enhanced/pairs")
+def add_pair(item: PairItem):
+    pairs = _read_pairs()
+    sym = item.symbol.strip().upper()
+    if sym not in pairs:
+        pairs.append(sym)
+        _write_pairs(pairs)
+    return {"pairs": pairs}
+
+@app.delete("/api/enhanced/pairs")
+def delete_pair(item: PairItem):
+    pairs = _read_pairs()
+    sym = item.symbol.strip().upper()
+    pairs = [p for p in pairs if p != sym]
+    _write_pairs(pairs)
+    return {"pairs": pairs}
+
 @app.get("/api/enhanced/ml-models")
 async def get_ml_models():
     """Get ML model information"""
