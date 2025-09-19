@@ -204,7 +204,7 @@ async def get_positions():
                         # Convert to UTC+3 for display (VPS is UTC, browser is UTC+3)
                         utc_timestamp = pos.timestamp
                         utc_plus_3 = utc_timestamp + timedelta(hours=3)
-                        timestamp_str = utc_plus_3.isoformat()
+                        timestamp_str = utc_plus_3.strftime("%Y-%m-%d %H:%M:%S UTC+3")
                         
                         # Calculate duration
                         now_utc = datetime.now()

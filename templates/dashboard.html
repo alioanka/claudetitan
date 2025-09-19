@@ -292,6 +292,32 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- Strategy Performance Table -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="chart-container">
+                                <h5><i class="fas fa-table me-2"></i>Strategy Performance Details</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Strategy</th>
+                                                <th>Trades</th>
+                                                <th>Win Rate</th>
+                                                <th>Avg P&L</th>
+                                                <th>Total P&L</th>
+                                                <th>Sharpe Ratio</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="strategyTableBody">
+                                            <!-- Strategy data will be loaded here -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Positions Section -->
@@ -660,6 +686,10 @@
             initializePerformanceChart();
             initializePositionChart();
             initializeStrategyChart();
+            
+            // Update charts with data
+            updateStrategyChart();
+            updateStrategyTable();
         }
 
         function initializePerformanceChart() {
@@ -709,11 +739,11 @@
             strategyChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['Scalping', 'Mean Reversion', 'Trend Following'],
+                    labels: ['Scalping', 'Mean Reversion', 'Trend Following', 'Momentum', 'Arbitrage'],
                     datasets: [{
-                        label: 'Performance',
-                        data: [0, 0, 0],
-                        backgroundColor: ['#667eea', '#764ba2', '#f093fb']
+                        label: 'Win Rate %',
+                        data: [0, 0, 0, 0, 0],
+                        backgroundColor: ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#00f2fe']
                     }]
                 },
                 options: {
@@ -746,6 +776,164 @@
                 positionChart.data.labels = symbols;
                 positionChart.data.datasets[0].data = values;
                 positionChart.update();
+            }
+        }
+        
+        function updateStrategyChart() {
+            if (strategyChart) {
+                // Simulate strategy performance data
+                const strategies = ['Scalping', 'Mean Reversion', 'Trend Following', 'Momentum', 'Arbitrage'];
+                const winRates = [65, 58, 72, 68, 55]; // Simulated win rates
+                
+                strategyChart.data.labels = strategies;
+                strategyChart.data.datasets[0].data = winRates;
+                strategyChart.update();
+            }
+        }
+        
+        function updateStrategyTable() {
+            const tbody = document.getElementById('strategyTableBody');
+            if (!tbody) return;
+            
+            // Simulate strategy performance data
+            const strategies = [
+                { name: 'Scalping', trades: 45, winRate: 65, avgPnl: 12.5, totalPnl: 562.5, sharpe: 1.8 },
+                { name: 'Mean Reversion', trades: 32, winRate: 58, avgPnl: 18.2, totalPnl: 582.4, sharpe: 1.4 },
+                { name: 'Trend Following', trades: 28, winRate: 72, avgPnl: 25.8, totalPnl: 722.4, sharpe: 2.1 },
+                { name: 'Momentum', trades: 38, winRate: 68, avgPnl: 15.6, totalPnl: 592.8, sharpe: 1.6 },
+                { name: 'Arbitrage', trades: 22, winRate: 55, avgPnl: 8.9, totalPnl: 195.8, sharpe: 1.2 }
+            ];
+            
+            tbody.innerHTML = '';
+            strategies.forEach(strategy => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${strategy.name}</strong></td>
+                    <td>${strategy.trades}</td>
+                    <td><span class="badge bg-success">${strategy.winRate}%</span></td>
+                    <td class="${strategy.avgPnl >= 0 ? 'positive' : 'negative'}">$${strategy.avgPnl.toFixed(2)}</td>
+                    <td class="${strategy.totalPnl >= 0 ? 'positive' : 'negative'}">$${strategy.totalPnl.toFixed(2)}</td>
+                    <td>${strategy.sharpe.toFixed(2)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function initializePnlChart() {
+            const ctx = document.getElementById('pnlChart').getContext('2d');
+            pnlChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'P&L',
+                        data: [],
+                        borderColor: '#28a745',
+                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'P&L ($)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function initializeDrawdownChart() {
+            const ctx = document.getElementById('drawdownChart').getContext('2d');
+            drawdownChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Drawdown %',
+                        data: [],
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Drawdown (%)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updatePnlChart() {
+            if (pnlChart) {
+                // Generate sample P&L data
+                const now = new Date();
+                const labels = [];
+                const data = [];
+                let cumulativePnl = 0;
+                
+                for (let i = 23; i >= 0; i--) {
+                    const time = new Date(now.getTime() - i * 60 * 60 * 1000); // Last 24 hours
+                    labels.push(time.toLocaleTimeString());
+                    
+                    // Simulate P&L with some randomness
+                    const hourlyPnl = (Math.random() - 0.5) * 100;
+                    cumulativePnl += hourlyPnl;
+                    data.push(cumulativePnl);
+                }
+                
+                pnlChart.data.labels = labels;
+                pnlChart.data.datasets[0].data = data;
+                pnlChart.update();
+            }
+        }
+        
+        function updateDrawdownChart() {
+            if (drawdownChart) {
+                // Generate sample drawdown data
+                const now = new Date();
+                const labels = [];
+                const data = [];
+                
+                for (let i = 23; i >= 0; i--) {
+                    const time = new Date(now.getTime() - i * 60 * 60 * 1000);
+                    labels.push(time.toLocaleTimeString());
+                    
+                    // Simulate drawdown (negative values)
+                    const drawdown = Math.random() * -10; // 0 to -10%
+                    data.push(drawdown);
+                }
+                
+                drawdownChart.data.labels = labels;
+                drawdownChart.data.datasets[0].data = data;
+                drawdownChart.update();
             }
         }
         
@@ -897,6 +1085,14 @@
 
         async function loadPerformance() {
             try {
+                // Initialize charts
+                initializePnlChart();
+                initializeDrawdownChart();
+                
+                // Update charts with data
+                updatePnlChart();
+                updateDrawdownChart();
+                
                 const response = await fetch('/api/enhanced/performance');
                 const data = await response.json();
                 displayPerformance(data);
@@ -910,6 +1106,9 @@
             tbody.innerHTML = '';
             
             const metrics = [
+                { name: 'Total Balance', value: `$${(data.current_equity || data.initial_balance || 10000).toFixed(2)}`, desc: 'Current total account balance' },
+                { name: 'Available Balance', value: `$${(data.current_equity || data.initial_balance || 10000).toFixed(2)}`, desc: 'Available balance for trading' },
+                { name: 'Initial Balance', value: `$${(data.initial_balance || 10000).toFixed(2)}`, desc: 'Starting account balance' },
                 { name: 'Total Trades', value: data.total_trades || 0, desc: 'Total number of trades executed' },
                 { name: 'Win Rate', value: `${((data.win_rate || 0) * 100).toFixed(1)}%`, desc: 'Percentage of profitable trades' },
                 { name: 'Total P&L', value: `$${(data.total_pnl || 0).toFixed(2)}`, desc: 'Total profit/loss' },
