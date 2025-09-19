@@ -131,6 +131,26 @@ class MarketDataCollector:
             logger.error(f"Error getting ticker for {symbol}: {e}")
             return None
     
+    def get_current_price(self, symbol: str) -> Optional[float]:
+        """Get current price for a symbol (synchronous)"""
+        try:
+            # Use cached data if available and recent
+            if symbol in self.data_cache:
+                cached_data = self.data_cache[symbol]
+                if cached_data and len(cached_data) > 0:
+                    # Return the most recent close price
+                    return float(cached_data.iloc[-1]['close'])
+            
+            # Fallback: try to get ticker synchronously
+            if self.exchange:
+                ticker = self.exchange.fetch_ticker(symbol)
+                return float(ticker['last']) if ticker and 'last' in ticker else None
+            
+            return None
+        except Exception as e:
+            logger.error(f"Error getting current price for {symbol}: {e}")
+            return None
+    
     async def get_orderbook(self, symbol: str, limit: int = 20) -> Optional[Dict]:
         """Get order book for a symbol"""
         try:

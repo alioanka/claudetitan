@@ -321,6 +321,29 @@ class TradingBot:
         except Exception as e:
             logger.error(f"Error logging performance metrics: {e}")
     
+    def get_performance_metrics(self):
+        """Get performance metrics for dashboard"""
+        try:
+            if not self.trading_engine:
+                return {}
+            
+            # Get performance from trading engine
+            performance = self.trading_engine.get_performance_metrics()
+            
+            # Add additional metrics
+            if performance:
+                performance.update({
+                    'bot_status': 'running' if self.running else 'stopped',
+                    'uptime': str(datetime.now() - self.start_time) if hasattr(self, 'start_time') else '0:00:00',
+                    'last_update': datetime.now().isoformat()
+                })
+            
+            return performance or {}
+            
+        except Exception as e:
+            logger.error(f"Error getting performance metrics: {e}")
+            return {}
+    
     async def _close_all_positions(self):
         """Close all open positions"""
         try:

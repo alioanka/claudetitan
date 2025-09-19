@@ -18,6 +18,10 @@ from contextlib import asynccontextmanager
 
 from config import settings
 from paper_trading import PaperTradingEngine
+from simple_logging import setup_simple_logging
+
+# Setup logging
+setup_simple_logging(settings.log_level, "logs")
 from market_data import MarketDataCollector
 from ml_module import MLModelTrainer
 from risk_management import RiskManager
