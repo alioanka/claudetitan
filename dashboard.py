@@ -171,6 +171,16 @@ async def get_account():
             raise HTTPException(status_code=500, detail="Trading engine not initialized")
         
         account_summary = trading_engine.get_account_summary()
+        # If engine exposes useful fields, include them without breaking old clients
+        try:
+            if hasattr(trading_engine, 'account') and trading_engine.account:
+                acc = trading_engine.account
+                if getattr(acc, 'available_balance', None) is not None:
+                    account_summary['available_balance'] = acc.available_balance
+                if getattr(acc, 'margin_used', None) is not None:
+                    account_summary['margin_used'] = acc.margin_used
+        except Exception:
+            pass
         return account_summary
     except Exception as e:
         logger.error(f"Error getting account info: {e}")
@@ -199,22 +209,29 @@ async def get_positions():
                     # Calculate P&L percentage
                     pnl_percentage = (current_pnl / (pos.entry_price * pos.size)) * 100
                     
-                    # Calculate duration with timezone awareness
-                    duration_str = None
+                    # Normalize opened time across possible attrs
+                    opened_raw = getattr(pos, 'opened_at', None) or getattr(pos, 'timestamp', None) or getattr(pos, 'created_at', None)
+                    closed_raw = getattr(pos, 'closed_at', None)
+
                     timestamp_str = None
-                    if hasattr(pos, 'timestamp') and pos.timestamp:
-                        # Convert to UTC+3 for display (VPS is UTC, browser is UTC+3)
-                        utc_timestamp = pos.timestamp
-                        utc_plus_3 = utc_timestamp + timedelta(hours=3)
-                        timestamp_str = utc_plus_3.strftime("%Y-%m-%d %H:%M:%S UTC+3")
-                        
-                        # Calculate duration
-                        now_utc = datetime.now()
-                        duration = now_utc - utc_timestamp
-                        hours, remainder = divmod(duration.total_seconds(), 3600)
-                        minutes, seconds = divmod(remainder, 60)
-                        duration_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
-                    
+                    duration_str = None
+                    if opened_raw:
+                        # DO NOT bake UTC+3 here—send ISO; browser will show local automatically
+                        try:
+                            timestamp_str = opened_raw.isoformat()
+                        except Exception:
+                            timestamp_str = str(opened_raw)
+
+                        # compute duration
+                        end = closed_raw or datetime.utcnow()
+                        try:
+                            duration = end - opened_raw
+                            hours, remainder = divmod(duration.total_seconds(), 3600)
+                            minutes, seconds = divmod(remainder, 60)
+                            duration_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+                        except Exception:
+                            duration_str = None
+
                     # Create updated position dict
                     pos_dict = {
                         'symbol': pos.symbol,
@@ -224,16 +241,36 @@ async def get_positions():
                         'current_price': current_price,
                         'pnl': current_pnl,
                         'pnl_percentage': pnl_percentage,
-                        'timestamp': timestamp_str,
-                        'duration': duration_str,
-                        'open_time_utc_plus_3': timestamp_str
+                        'opened_at': timestamp_str,   # <— NEW: canonical opened time
+                        'closed_at': closed_raw.isoformat() if closed_raw else None,
+                        'duration': duration_str
                     }
                 else:
                     # Fallback to original position data if price unavailable
                     pos_dict = pos.__dict__.copy()
-                    if hasattr(pos, 'timestamp'):
-                        pos_dict['timestamp'] = pos.timestamp.isoformat()
-                        pos_dict['duration'] = str(datetime.now() - pos.timestamp)
+                    
+                    # Normalize opened time across possible attrs for fallback too
+                    opened_raw = getattr(pos, 'opened_at', None) or getattr(pos, 'timestamp', None) or getattr(pos, 'created_at', None)
+                    closed_raw = getattr(pos, 'closed_at', None)
+
+                    if opened_raw:
+                        try:
+                            pos_dict['opened_at'] = opened_raw.isoformat()
+                        except Exception:
+                            pos_dict['opened_at'] = str(opened_raw)
+                        
+                        # compute duration
+                        end = closed_raw or datetime.utcnow()
+                        try:
+                            duration = end - opened_raw
+                            hours, remainder = divmod(duration.total_seconds(), 3600)
+                            minutes, seconds = divmod(remainder, 60)
+                            pos_dict['duration'] = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+                        except Exception:
+                            pos_dict['duration'] = None
+                    else:
+                        pos_dict['opened_at'] = None
+                        pos_dict['duration'] = None
                 
                 updated_positions.append(pos_dict)
             except Exception as e:
@@ -271,6 +308,12 @@ async def get_orders():
             if hasattr(order, 'pnl'):
                 order_dict['pnl'] = order.pnl
                 order_dict['pnl_percentage'] = (order.pnl / (order.price * order.size)) * 100 if order.price and order.size else 0
+
+            # bubble up close reason if the engine sets it anywhere
+            for k in ('closing_reason', 'close_reason', 'reason'):
+                if k in order_dict and order_dict[k]:
+                    order_dict['closing_reason'] = order_dict[k]
+                    break
             
             enhanced_orders.append(order_dict)
         
@@ -310,13 +353,14 @@ async def get_performance():
 _PAIRS_FILE = Path(os.environ.get("PAIRS_FILE", "/app/config_pairs.json"))
 
 def _read_pairs():
+    # If a file exists, prefer it (persisted edits)
     try:
         if _PAIRS_FILE.exists():
             return json.loads(_PAIRS_FILE.read_text(encoding="utf-8")).get("pairs", [])
     except Exception:
         pass
-    # fallback defaults
-    return ["BTC/USDT","ETH/USDT","SOL/USDT","AVAX/USDT","LINK/USDT","UNI/USDT","DOT/USDT"]
+    # Otherwise mirror config defaults
+    return list(settings.trading_pairs)
 
 def _write_pairs(pairs):
     try:
@@ -324,6 +368,21 @@ def _write_pairs(pairs):
         _PAIRS_FILE.write_text(json.dumps({"pairs": pairs}, indent=2), encoding="utf-8")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to persist pairs: {e}")
+
+def _apply_pairs_to_runtime(pairs):
+    # update pydantic settings object
+    try:
+        settings.trading_pairs = pairs  # immediate in-process
+    except Exception:
+        pass
+    # update engine/collector live if possible
+    try:
+        if trading_engine and hasattr(trading_engine, 'set_symbols'):
+            trading_engine.set_symbols(pairs)
+        if market_data_collector and hasattr(market_data_collector, 'set_symbols'):
+            market_data_collector.set_symbols(pairs)
+    except Exception as e:
+        logger.warning(f"Could not apply pairs to runtime: {e}")
 
 class PairItem(BaseModel):
     symbol: str
@@ -336,17 +395,17 @@ def get_pairs():
 def add_pair(item: PairItem):
     pairs = _read_pairs()
     sym = item.symbol.strip().upper()
-    if sym not in pairs:
+    if sym and sym not in pairs:
         pairs.append(sym)
         _write_pairs(pairs)
+        _apply_pairs_to_runtime(pairs)
     return {"pairs": pairs}
 
 @app.delete("/api/enhanced/pairs")
 def delete_pair(item: PairItem):
-    pairs = _read_pairs()
-    sym = item.symbol.strip().upper()
-    pairs = [p for p in pairs if p != sym]
+    pairs = [p for p in _read_pairs() if p != item.symbol.strip().upper()]
     _write_pairs(pairs)
+    _apply_pairs_to_runtime(pairs)
     return {"pairs": pairs}
 
 @app.get("/api/enhanced/ml-models")

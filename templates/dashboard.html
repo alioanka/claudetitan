@@ -855,37 +855,71 @@
             try {
                 const resp = await fetch('/api/enhanced/orders');
                 const payload = await resp.json();
-                const orders = payload.orders || [];
+                const orders = (payload && payload.orders) || [];
 
-                // Group by strategy (fallback to 'Scalping' if absent in Titan)
-                const byStrategy = {};
-                for (const o of orders) {
-                    const strat = (o.strategy || 'Scalping').trim();
-                    if (!byStrategy[strat]) byStrategy[strat] = [];
-                    byStrategy[strat].push(o);
+                // Build closed positions from orders (BUY->SELL closes long, SELL->BUY closes short)
+                function buildPositions(orders) {
+                    const bySymbol = {};
+                    orders.forEach(o => {
+                        if (!bySymbol[o.symbol]) bySymbol[o.symbol] = [];
+                        bySymbol[o.symbol].push(o);
+                    });
+                    const positions = [];
+                    Object.entries(bySymbol).forEach(([sym, list]) => {
+                        list.sort((a,b) => new Date(a.timestamp||0) - new Date(b.timestamp||0));
+                        let open = null;
+                        list.forEach(o => {
+                            if (!open) { open = o; return; }
+                            const closes = (open.side === 'buy' && o.side === 'sell') ||
+                                           (open.side === 'sell' && o.side === 'buy');
+                            if (closes) {
+                                const qty = Math.min(Number(open.amount||0), Number(o.amount||0));
+                                const entry = Number(open.filled_price || open.price || 0);
+                                const exit  = Number(o.filled_price   || o.price  || 0);
+                                const side  = open.side === 'buy' ? 'long' : 'short';
+                                const pnl   = side === 'long' ? (exit - entry) * qty : (entry - exit) * qty;
+                                positions.push({
+                                    symbol: sym,
+                                    side, qty, entry, exit, pnl,
+                                    opened_at: open.timestamp || open.created_at || null,
+                                    closed_at: o.timestamp || o.created_at || null,
+                                    strategy: (open.strategy || o.strategy || 'Scalping').trim()
+                                });
+                                open = null;
+                            } else {
+                                open = o; // reset if two buys/sells in a row
+                            }
+                        });
+                    });
+                    return positions;
                 }
 
-                const rows = [];
-                Object.entries(byStrategy).forEach(([name, arr]) => {
-                    const pnls = arr.map(a => Number(a.pnl || 0));
-                    const wins = pnls.filter(x => x > 0).length;
-                    const trades = arr.length;
-                    const winRate = trades ? (wins / trades * 100) : 0;
-                    const totalPnl = pnls.reduce((s, x) => s + x, 0);
-                    const avgPnl = trades ? totalPnl / trades : 0;
+                const positions = buildPositions(orders);
 
-                    // Naive Sharpe: mean(pnl) / std(pnl), annualization omitted for simplicity
+                // Group by strategy
+                const map = {};
+                positions.forEach(p => {
+                    const key = p.strategy || 'Scalping';
+                    if (!map[key]) map[key] = [];
+                    map[key].push(p);
+                });
+
+                const rows = Object.entries(map).map(([name, arr]) => {
+                    const pnls = arr.map(a => Number(a.pnl||0));
+                    const trades = arr.length;
+                    const wins = pnls.filter(x => x > 0).length;
+                    const totalPnl = pnls.reduce((s,x)=>s+x,0);
+                    const avgPnl = trades ? totalPnl / trades : 0;
                     const mean = avgPnl;
                     const variance = pnls.length ? pnls.reduce((s, x) => s + Math.pow(x - mean, 2), 0) / pnls.length : 0;
                     const std = Math.sqrt(variance) || 1e-9;
                     const sharpe = mean / std;
+                    return { name, trades, winRate: trades? (wins/trades*100):0, avgPnl, totalPnl, sharpe };
+                }).sort((a,b)=>b.totalPnl - a.totalPnl);
 
-                    rows.push({ name, trades, winRate, avgPnl, totalPnl, sharpe });
-                });
-
-                // Render
+                // Render table
                 tbody.innerHTML = '';
-                rows.sort((a,b) => b.totalPnl - a.totalPnl).forEach(strategy => {
+                rows.forEach(strategy => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td><strong>${strategy.name}</strong></td>
@@ -900,7 +934,6 @@
                 });
             } catch (e) {
                 console.error('Strategy table error:', e);
-                // Keep old content if fetch fails
             }
         }
         
@@ -1203,40 +1236,68 @@
                     data = await response.json();
                 } catch (_) {}
 
-                // Fallback: compute from orders if API is empty
-                if (!data || (data.total_trades === 0 && data.total_pnl === 0)) {
+                const isEmpty = !data || (
+                    (data.total_trades === 0 && data.total_pnl === 0) ||
+                    Object.keys(data).length === 0
+                );
+
+                if (isEmpty) {
+                    // fallback: compute from closed positions
                     const ordersResp = await fetch('/api/enhanced/orders');
                     const ordersPayload = await ordersResp.json();
-                    const orders = ordersPayload.orders || [];
+                    const orders = (ordersPayload && ordersPayload.orders) || [];
 
-                    const fills = orders.filter(o => o.status === 'filled');
-                    const pnls  = fills.map(o => Number(o.pnl || 0));
-                    const totalTrades = fills.length;
-                    const wins = pnls.filter(x => x > 0).length;
-                    const totalPnl = pnls.reduce((s,x)=>s+x, 0);
-                    const avgWin = (() => {
-                        const w = pnls.filter(x=>x>0);
-                        return w.length ? w.reduce((s,x)=>s+x,0)/w.length : 0;
-                    })();
-                    const avgLoss = (() => {
-                        const l = pnls.filter(x=>x<0);
-                        return l.length ? l.reduce((s,x)=>s+x,0)/l.length : 0;
+                    // Build closed positions
+                    const positions = (function(){
+                        const bySymbol = {};
+                        orders.forEach(o=>{
+                            if(!bySymbol[o.symbol]) bySymbol[o.symbol]=[];
+                            bySymbol[o.symbol].push(o);
+                        });
+                        const res = [];
+                        Object.values(bySymbol).forEach(list=>{
+                            list.sort((a,b)=>new Date(a.timestamp||0)-new Date(b.timestamp||0));
+                            let open=null;
+                            list.forEach(o=>{
+                                if(!open){ open=o; return; }
+                                const closes = (open.side==='buy' && o.side==='sell') || (open.side==='sell'&&o.side==='buy');
+                                if(closes){
+                                    const qty=Math.min(Number(open.amount||0),Number(o.amount||0));
+                                    const entry=Number(open.filled_price||open.price||0);
+                                    const exit=Number(o.filled_price||o.price||0);
+                                    const side=open.side==='buy'?'long':'short';
+                                    const pnl=side==='long'?(exit-entry)*qty:(entry-exit)*qty;
+                                    res.push({pnl});
+                                    open=null;
+                                } else {
+                                    open=o;
+                                }
+                            });
+                        });
+                        return res;
                     })();
 
-                    const equityResp = await fetch('/api/enhanced/account');
-                    const acct = await equityResp.json();
+                    const pnls = positions.map(p=>Number(p.pnl||0));
+                    const totalTrades = positions.length;
+                    const wins = pnls.filter(x=>x>0).length;
+                    const totalPnl = pnls.reduce((s,x)=>s+x,0);
+                    const avgWin = (()=>{const w=pnls.filter(x=>x>0); return w.length? w.reduce((s,x)=>s+x,0)/w.length:0;})();
+                    const avgLoss= (()=>{const l=pnls.filter(x=>x<0); return l.length? l.reduce((s,x)=>s+x,0)/l.length:0;})();
+
+                    const acctResp = await fetch('/api/enhanced/account');
+                    const acct = await acctResp.json();
 
                     data = {
-                        current_equity: Number(acct.equity || acct.balance || 0),
+                        total_balance: Number(acct.equity || acct.balance || 0),
                         available_balance: Number(acct.available_balance || acct.balance || 0),
                         initial_balance: Number(acct.initial_balance || 10000),
                         total_trades: totalTrades,
-                        win_rate: totalTrades ? wins/totalTrades : 0,
+                        win_rate: totalTrades ? wins/totalTrades*100 : 0,
                         total_pnl: totalPnl,
-                        avg_win: avgWin,
-                        avg_loss: avgLoss,
-                        max_drawdown: 0, // could compute from equity history if available
-                        sharpe_ratio: 0, // need equity series to compute accurately
+                        average_win: avgWin,
+                        average_loss: avgLoss,
+                        max_drawdown: 0,
+                        sharpe_ratio: 0,
                         total_return: (Number(acct.equity||0) && Number(acct.initial_balance||0))
                             ? ((Number(acct.equity)-Number(acct.initial_balance))/Number(acct.initial_balance))*100
                             : 0
@@ -1254,17 +1315,17 @@
             tbody.innerHTML = '';
             
             const metrics = [
-                { name: 'Total Balance', value: `$${(data.current_equity || data.initial_balance || 10000).toFixed(2)}`, desc: 'Current total account balance' },
-                { name: 'Available Balance', value: `$${(data.current_equity || data.initial_balance || 10000).toFixed(2)}`, desc: 'Available balance for trading' },
+                { name: 'Total Balance', value: `$${(data.total_balance || data.current_equity || data.initial_balance || 10000).toFixed(2)}`, desc: 'Current total account balance' },
+                { name: 'Available Balance', value: `$${(data.available_balance || data.total_balance || data.current_equity || data.initial_balance || 10000).toFixed(2)}`, desc: 'Available balance for trading' },
                 { name: 'Initial Balance', value: `$${(data.initial_balance || 10000).toFixed(2)}`, desc: 'Starting account balance' },
                 { name: 'Total Trades', value: data.total_trades || 0, desc: 'Total number of trades executed' },
-                { name: 'Win Rate', value: `${((data.win_rate || 0) * 100).toFixed(1)}%`, desc: 'Percentage of profitable trades' },
+                { name: 'Win Rate', value: `${(data.win_rate || 0).toFixed(1)}%`, desc: 'Percentage of profitable trades' },
                 { name: 'Total P&L', value: `$${(data.total_pnl || 0).toFixed(2)}`, desc: 'Total profit/loss' },
-                { name: 'Average Win', value: `$${(data.avg_win || 0).toFixed(2)}`, desc: 'Average profit per winning trade' },
-                { name: 'Average Loss', value: `$${(data.avg_loss || 0).toFixed(2)}`, desc: 'Average loss per losing trade' },
+                { name: 'Average Win', value: `$${(data.average_win || data.avg_win || 0).toFixed(2)}`, desc: 'Average profit per winning trade' },
+                { name: 'Average Loss', value: `$${(data.average_loss || data.avg_loss || 0).toFixed(2)}`, desc: 'Average loss per losing trade' },
                 { name: 'Max Drawdown', value: `$${(data.max_drawdown || 0).toFixed(2)}`, desc: 'Maximum peak-to-trough decline' },
                 { name: 'Sharpe Ratio', value: (data.sharpe_ratio || 0).toFixed(2), desc: 'Risk-adjusted return measure' },
-                { name: 'Total Return', value: `${((data.total_return || 0) * 100).toFixed(2)}%`, desc: 'Total return on investment' }
+                { name: 'Total Return', value: `${(data.total_return || 0).toFixed(2)}%`, desc: 'Total return on investment' }
             ];
             
             metrics.forEach(metric => {
@@ -1556,6 +1617,9 @@
 
                 const pnlClass = p.pnl >= 0 ? 'positive' : 'negative';
                 const row = document.createElement('tr');
+                row.className = p.pnl >= 0 ? 'table-success' : 'table-danger';
+                const reason = p.closing_reason || p.reason || inferCloseReason(p);
+
                 row.innerHTML = `
                     <td>${p.symbol}</td>
                     <td>${p.side}</td>
@@ -1566,10 +1630,27 @@
                     <td>${dur}</td>
                     <td>${opened ? opened.toLocaleString() : 'N/A'}</td>
                     <td>${closed ? closed.toLocaleString() : 'N/A'}</td>
-                    <td>${p.closing_reason || ''}</td>
+                    <td>${reason || '—'}</td>
                 `;
                 tbody.appendChild(row);
             });
+        }
+
+        function inferCloseReason(p) {
+            // Heuristic: label manual closes from dashboard endpoint name,
+            // otherwise classify by TP/SL thresholds if available on the client.
+            try {
+                // If we ever include flags on the close order, honor them here.
+                if (p.reason && /manual/i.test(p.reason)) return 'Manual';
+                if (p.closing_reason) return p.closing_reason;
+
+                // If we know your SL/TP from config, we could infer here; for now keep generic:
+                // positive pnl => 'TP hit', negative => 'SL hit'
+                if (typeof p.pnl === 'number') {
+                    return p.pnl >= 0 ? 'TP hit' : 'SL hit';
+                }
+            } catch(_) {}
+            return '';
         }
         
         // Pairs management functions
