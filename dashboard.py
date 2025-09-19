@@ -172,26 +172,86 @@ async def get_account():
 
 @app.get("/api/enhanced/positions")
 async def get_positions():
-    """Get current positions"""
+    """Get current positions with updated prices"""
     try:
         if not trading_engine:
             raise HTTPException(status_code=500, detail="Trading engine not initialized")
         
-        positions = [pos.__dict__ for pos in trading_engine.account.positions]
-        return {"positions": positions}
+        # Update position prices with current market data
+        updated_positions = []
+        for pos in trading_engine.account.positions:
+            try:
+                # Get current price from market data
+                current_price = trading_engine.market_data_collector.get_current_price(pos.symbol)
+                if current_price:
+                    # Calculate current P&L
+                    if pos.side == 'long':
+                        current_pnl = (current_price - pos.entry_price) * pos.size
+                    else:  # short
+                        current_pnl = (pos.entry_price - current_price) * pos.size
+                    
+                    # Calculate P&L percentage
+                    pnl_percentage = (current_pnl / (pos.entry_price * pos.size)) * 100
+                    
+                    # Create updated position dict
+                    pos_dict = {
+                        'symbol': pos.symbol,
+                        'side': pos.side,
+                        'size': pos.size,
+                        'entry_price': pos.entry_price,
+                        'current_price': current_price,
+                        'pnl': current_pnl,
+                        'pnl_percentage': pnl_percentage,
+                        'timestamp': pos.timestamp.isoformat() if hasattr(pos, 'timestamp') else None,
+                        'duration': str(datetime.now() - pos.timestamp) if hasattr(pos, 'timestamp') else None
+                    }
+                else:
+                    # Fallback to original position data if price unavailable
+                    pos_dict = pos.__dict__.copy()
+                    if hasattr(pos, 'timestamp'):
+                        pos_dict['timestamp'] = pos.timestamp.isoformat()
+                        pos_dict['duration'] = str(datetime.now() - pos.timestamp)
+                
+                updated_positions.append(pos_dict)
+            except Exception as e:
+                logger.error(f"Error updating position {pos.symbol}: {e}")
+                # Fallback to original position data
+                pos_dict = pos.__dict__.copy()
+                if hasattr(pos, 'timestamp'):
+                    pos_dict['timestamp'] = pos.timestamp.isoformat()
+                    pos_dict['duration'] = str(datetime.now() - pos.timestamp)
+                updated_positions.append(pos_dict)
+        
+        return {"positions": updated_positions}
     except Exception as e:
         logger.error(f"Error getting positions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/enhanced/orders")
 async def get_orders():
-    """Get recent orders"""
+    """Get recent orders with enhanced information"""
     try:
         if not trading_engine:
             raise HTTPException(status_code=500, detail="Trading engine not initialized")
         
-        orders = [order.__dict__ for order in trading_engine.account.orders[-20:]]
-        return {"orders": orders}
+        # Get recent orders and enhance with PnL and duration info
+        enhanced_orders = []
+        for order in trading_engine.account.orders[-20:]:
+            order_dict = order.__dict__.copy()
+            
+            # Add timestamp formatting
+            if hasattr(order, 'timestamp'):
+                order_dict['timestamp'] = order.timestamp.isoformat()
+                order_dict['duration'] = str(datetime.now() - order.timestamp)
+            
+            # Add PnL information if available
+            if hasattr(order, 'pnl'):
+                order_dict['pnl'] = order.pnl
+                order_dict['pnl_percentage'] = (order.pnl / (order.price * order.size)) * 100 if order.price and order.size else 0
+            
+            enhanced_orders.append(order_dict)
+        
+        return {"orders": enhanced_orders}
     except Exception as e:
         logger.error(f"Error getting orders: {e}")
         raise HTTPException(status_code=500, detail=str(e))

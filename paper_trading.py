@@ -569,6 +569,9 @@ class PaperTradingEngine:
             max_drawdown = min([t['pnl'] for t in self.trade_outcomes]) if self.trade_outcomes else 0
             sharpe_ratio = np.mean([t['pnl'] for t in self.trade_outcomes]) / np.std([t['pnl'] for t in self.trade_outcomes]) if len(self.trade_outcomes) > 1 else 0
             
+            # Calculate realistic total return based on P&L
+            total_return = (total_pnl / self.initial_balance) * 100 if self.initial_balance > 0 else 0
+            
             return {
                 'total_trades': total_trades,
                 'winning_trades': winning_trades,
@@ -580,8 +583,9 @@ class PaperTradingEngine:
                 'max_drawdown': max_drawdown,
                 'sharpe_ratio': sharpe_ratio,
                 'current_equity': self.account.equity,
-                'total_return': (self.account.equity - self.initial_balance) / self.initial_balance,
-                'active_positions': len(self.account.positions)
+                'total_return': total_return,
+                'active_positions': len(self.account.positions),
+                'initial_balance': self.initial_balance
             }
             
         except Exception as e:
@@ -589,13 +593,35 @@ class PaperTradingEngine:
             return {}
     
     def get_account_summary(self) -> Dict:
-        """Get account summary"""
+        """Get account summary with JSON-serializable data"""
+        def serialize_datetime(obj):
+            """Convert datetime objects to ISO format strings"""
+            if hasattr(obj, 'isoformat'):
+                return obj.isoformat()
+            return obj
+        
+        def serialize_position(pos):
+            """Serialize position with datetime handling"""
+            pos_dict = asdict(pos)
+            for key, value in pos_dict.items():
+                if isinstance(value, datetime):
+                    pos_dict[key] = value.isoformat()
+            return pos_dict
+        
+        def serialize_order(order):
+            """Serialize order with datetime handling"""
+            order_dict = asdict(order)
+            for key, value in order_dict.items():
+                if isinstance(value, datetime):
+                    order_dict[key] = value.isoformat()
+            return order_dict
+        
         return {
             'balance': self.account.balance,
             'equity': self.account.equity,
             'total_pnl': self.account.total_pnl,
             'daily_pnl': self.account.daily_pnl,
-            'positions': [asdict(pos) for pos in self.account.positions],
-            'orders': [asdict(order) for order in self.account.orders[-10:]],  # Last 10 orders
+            'positions': [serialize_position(pos) for pos in self.account.positions],
+            'orders': [serialize_order(order) for order in self.account.orders[-10:]],  # Last 10 orders
             'performance': self.get_performance_metrics()
         }
