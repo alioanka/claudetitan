@@ -18,11 +18,15 @@ from risk_management import RiskManager
 from trading_strategies import StrategyEnsemble
 from dashboard import app
 
-# Configure simple logging
-from simple_logging import setup_simple_logging, get_logger
-setup_simple_logging(settings.log_level, "logs")
+# Configure robust logging to a deterministic directory
+import os
+from logging_config import setup_logging  # <- use the advanced logger
+LOG_DIR = os.environ.get("LOG_DIR", "/app/logs")  # must match your docker volume
+setup_logging(settings.log_level, LOG_DIR)
 
 logger = logging.getLogger(__name__)
+logger.info("🚀 Logging initialized from main.py")
+logger.info(f"LOG_DIR in effect: {LOG_DIR}")
 
 class TradingBot:
     """Main trading bot orchestrator"""

@@ -18,7 +18,7 @@ services:
       - LOG_LEVEL=INFO
     volumes:
       - ./trading-data:/app/data
-      - ./trading-logs:/app/logs
+      - ./logs:/app/logs
       - ./trading-models:/app/models
       - ./.env:/app/.env:ro
     depends_on:
@@ -43,7 +43,7 @@ services:
       - LOG_LEVEL=INFO
     volumes:
       - ./trading-data:/app/data
-      - ./trading-logs:/app/logs
+      - ./logs:/app/logs
       - ./trading-models:/app/models
       - ./.env:/app/.env:ro
     depends_on:

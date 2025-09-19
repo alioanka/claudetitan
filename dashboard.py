@@ -2,7 +2,6 @@
 Web Dashboard for Trading Bot
 """
 import logging
-from simple_logging import get_logger
 import asyncio
 import json
 from typing import Dict, List, Optional
@@ -20,15 +19,17 @@ from contextlib import asynccontextmanager
 
 from config import settings
 from paper_trading import PaperTradingEngine
-from simple_logging import setup_simple_logging
 
-# Setup logging
-setup_simple_logging(settings.log_level, "logs")
+# Configure robust logging to a deterministic directory
+import os
+from logging_config import setup_logging
+LOG_DIR = os.environ.get("LOG_DIR", "/app/logs")
+setup_logging(settings.log_level, LOG_DIR)
 from market_data import MarketDataCollector
 from ml_module import MLModelTrainer
 from risk_management import RiskManager
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # Pydantic models for API
 class LoginRequest(BaseModel):
