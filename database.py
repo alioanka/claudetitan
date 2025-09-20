@@ -3,6 +3,8 @@ Database models and operations for trading bot
 """
 import os
 import asyncio
+import uuid
+import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict
@@ -10,8 +12,6 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.dialects.postgresql import UUID
-import uuid
-import json
 
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://trading_enhanced:enhanced_password@localhost:5433/trading_bot_enhanced")
