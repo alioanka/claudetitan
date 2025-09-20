@@ -234,7 +234,7 @@ class PaperTradingEngine:
                 'strategy': order.strategy,
                 'created_at': order.created_at,
                 'filled_at': order.filled_at,
-                'metadata': order.metadata
+                'order_metadata': order.metadata
             })
             return order_id
         except Exception as e:

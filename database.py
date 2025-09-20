@@ -75,7 +75,7 @@ class TradingOrder(Base):
     strategy = Column(String, default="Unknown")
     created_at = Column(DateTime, default=datetime.utcnow)
     filled_at = Column(DateTime)
-    metadata = Column(JSON)
+    order_metadata = Column(JSON)
 
 class TradingTrade(Base):
     __tablename__ = "trading_trades"
@@ -253,10 +253,10 @@ class DatabaseManager:
                     'filled_price': order.filled_price,
                     'filled_amount': order.filled_amount,
                     'fees': order.fees,
-                    'strategy': order.strategy,
-                    'created_at': order.created_at,
-                    'filled_at': order.filled_at,
-                    'metadata': order.metadata
+                'strategy': order.strategy,
+                'created_at': order.created_at,
+                'filled_at': order.filled_at,
+                'order_metadata': order.metadata
                 }
                 for order in orders
             ]

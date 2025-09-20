@@ -244,6 +244,7 @@ async def get_orders():
             order['created_at'] = order['created_at'].isoformat() if order['created_at'] else None
             order['filled_at'] = order['filled_at'].isoformat() if order['filled_at'] else None
             order['strategy'] = order.get('strategy', 'Unknown')
+            order['metadata'] = order.get('order_metadata', {})
         
         return {"orders": orders_data}
     except Exception as e:
