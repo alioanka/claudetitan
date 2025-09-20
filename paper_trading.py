@@ -4,6 +4,7 @@ Paper Trading System for Backtesting and Strategy Testing
 import logging
 import asyncio
 import json
+import uuid
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
