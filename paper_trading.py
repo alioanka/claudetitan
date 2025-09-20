@@ -254,14 +254,9 @@ class PaperTradingEngine:
     async def _update_account_after_fill(self, order: PaperOrder):
         """Update account after order fill"""
         try:
-            if order.side == OrderSide.BUY:
-                # Deduct cost from balance
-                cost = (order.filled_amount * order.filled_price) + order.fees
-                self.account.balance -= cost
-            else:
-                # Add proceeds to balance
-                proceeds = (order.filled_amount * order.filled_price) - order.fees
-                self.account.balance += proceeds
+            # For paper trading, we don't actually deduct/add money from balance
+            # The balance only changes when positions are closed with P&L
+            # This is just for tracking the order
             
             # Update equity and margins
             await self._update_account_metrics()
@@ -430,8 +425,9 @@ class PaperTradingEngine:
             )
             
             if order and order.status == OrderStatus.FILLED:
-                # Update balance with realized P&L
-                self.account.balance += position.unrealized_pnl
+                # Update balance with realized P&L (convert unrealized to realized)
+                realized_pnl = position.unrealized_pnl
+                self.account.balance += realized_pnl
                 
                 # Record trade outcome for ML
                 self.trade_outcomes.append({
@@ -578,7 +574,23 @@ class PaperTradingEngine:
     def get_performance_metrics(self) -> Dict:
         """Calculate performance metrics"""
         try:
-            if not self.trade_outcomes:
+            # Get all trading data (closed trades + active positions)
+            all_trades = []
+            
+            # Add closed trades
+            all_trades.extend(self.trade_outcomes)
+            
+            # Add active positions as "trades"
+            for pos in self.account.positions:
+                all_trades.append({
+                    'symbol': pos.symbol,
+                    'side': pos.side,
+                    'pnl': pos.unrealized_pnl,
+                    'timestamp': pos.created_at,
+                    'strategy': pos.strategy
+                })
+            
+            if not all_trades:
                 return {
                     'total_trades': 0,
                     'winning_trades': 0,
@@ -594,40 +606,53 @@ class PaperTradingEngine:
                     'available_balance': self.account.balance,
                     'total_return': 0,
                     'active_positions': len(self.account.positions),
-                    'initial_balance': self.initial_balance
+                    'initial_balance': self.initial_balance,
+                    'daily_pnl': self.account.daily_pnl,
+                    'weekly_pnl': 0,  # Will calculate
+                    'monthly_pnl': 0  # Will calculate
                 }
             
             # Basic metrics
-            total_trades = len(self.trade_outcomes)
-            winning_trades = len([t for t in self.trade_outcomes if t['pnl'] > 0])
-            losing_trades = len([t for t in self.trade_outcomes if t['pnl'] < 0])
+            total_trades = len(all_trades)
+            winning_trades = len([t for t in all_trades if t['pnl'] > 0])
+            losing_trades = len([t for t in all_trades if t['pnl'] < 0])
             
             win_rate = (winning_trades / total_trades) * 100 if total_trades > 0 else 0  # Convert to percentage
             
             # PnL metrics
-            total_pnl = sum(t['pnl'] for t in self.trade_outcomes)
-            avg_win = np.mean([t['pnl'] for t in self.trade_outcomes if t['pnl'] > 0]) if winning_trades > 0 else 0
-            avg_loss = np.mean([t['pnl'] for t in self.trade_outcomes if t['pnl'] < 0]) if losing_trades > 0 else 0
+            total_pnl = sum(t['pnl'] for t in all_trades)
+            avg_win = np.mean([t['pnl'] for t in all_trades if t['pnl'] > 0]) if winning_trades > 0 else 0
+            avg_loss = np.mean([t['pnl'] for t in all_trades if t['pnl'] < 0]) if losing_trades > 0 else 0
             
             # Calculate proper max drawdown (peak-to-trough decline)
             max_drawdown = 0
-            if self.trade_outcomes:
+            if all_trades:
                 cumulative_pnl = 0
                 peak = 0
-                for trade in self.trade_outcomes:
+                for trade in all_trades:
                     cumulative_pnl += trade['pnl']
                     peak = max(peak, cumulative_pnl)
                     drawdown = peak - cumulative_pnl
                     max_drawdown = max(max_drawdown, drawdown)
             
             # Calculate Sharpe ratio properly
-            if len(self.trade_outcomes) > 1:
-                returns = [t['pnl'] for t in self.trade_outcomes]
+            if len(all_trades) > 1:
+                returns = [t['pnl'] for t in all_trades]
                 mean_return = np.mean(returns)
                 std_return = np.std(returns)
                 sharpe_ratio = mean_return / std_return if std_return > 0 else 0
             else:
                 sharpe_ratio = 0
+            
+            # Calculate daily, weekly, monthly P&L
+            now = datetime.now()
+            daily_trades = [t for t in all_trades if (now - t['timestamp']).days < 1]
+            weekly_trades = [t for t in all_trades if (now - t['timestamp']).days < 7]
+            monthly_trades = [t for t in all_trades if (now - t['timestamp']).days < 30]
+            
+            daily_pnl = sum(t['pnl'] for t in daily_trades)
+            weekly_pnl = sum(t['pnl'] for t in weekly_trades)
+            monthly_pnl = sum(t['pnl'] for t in monthly_trades)
             
             # Calculate realistic total return based on P&L
             total_return = (total_pnl / self.initial_balance) * 100 if self.initial_balance > 0 else 0
@@ -647,7 +672,10 @@ class PaperTradingEngine:
                 'available_balance': self.account.balance,
                 'total_return': total_return,
                 'active_positions': len(self.account.positions),
-                'initial_balance': self.initial_balance
+                'initial_balance': self.initial_balance,
+                'daily_pnl': daily_pnl,
+                'weekly_pnl': weekly_pnl,
+                'monthly_pnl': monthly_pnl
             }
             
         except Exception as e:

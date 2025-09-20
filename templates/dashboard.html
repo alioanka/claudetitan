@@ -70,23 +70,28 @@
         .table-responsive {
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
+            width: 100%;
         }
         
         @media (max-width: 768px) {
             .table-responsive {
                 border: 1px solid #dee2e6;
                 border-radius: 0.375rem;
+                overflow-x: scroll;
+                -webkit-overflow-scrolling: touch;
             }
             
             .table {
                 margin-bottom: 0;
-                min-width: 800px; /* Ensure table doesn't get too compressed */
+                min-width: 1000px; /* Ensure table doesn't get too compressed */
+                width: 100%;
             }
             
             .table th, .table td {
                 white-space: nowrap;
                 padding: 0.5rem;
                 font-size: 0.875rem;
+                min-width: 80px;
             }
             
             .position-card {
@@ -100,6 +105,25 @@
             .position-card .col-md-2,
             .position-card .col-md-3 {
                 margin-bottom: 0.5rem;
+            }
+            
+            /* Force horizontal scrolling on mobile */
+            .table-responsive::-webkit-scrollbar {
+                height: 8px;
+            }
+            
+            .table-responsive::-webkit-scrollbar-track {
+                background: #f1f1f1;
+                border-radius: 4px;
+            }
+            
+            .table-responsive::-webkit-scrollbar-thumb {
+                background: #888;
+                border-radius: 4px;
+            }
+            
+            .table-responsive::-webkit-scrollbar-thumb:hover {
+                background: #555;
             }
         }
         .positive { color: #28a745; }
@@ -939,12 +963,19 @@
             if (!tbody) return;
 
             try {
-                const resp = await fetch('/api/enhanced/orders');
-                const payload = await resp.json();
-                const orders = (payload && payload.orders) || [];
+                // Get both closed positions and active positions
+                const [ordersResp, positionsResp] = await Promise.all([
+                    fetch('/api/enhanced/orders'),
+                    fetch('/api/enhanced/positions')
+                ]);
+                
+                const ordersData = await ordersResp.json();
+                const positionsData = await positionsResp.json();
+                const orders = (ordersData && ordersData.orders) || [];
+                const activePositions = (positionsData && positionsData.positions) || [];
 
                 // Build closed positions from orders (BUY->SELL closes long, SELL->BUY closes short)
-                function buildPositions(orders) {
+                function buildClosedPositions(orders) {
                     const bySymbol = {};
                     orders.forEach(o => {
                         if (!bySymbol[o.symbol]) bySymbol[o.symbol] = [];
@@ -969,7 +1000,7 @@
                                     side, qty, entry, exit, pnl,
                                     opened_at: open.timestamp || open.created_at || null,
                                     closed_at: o.timestamp || o.created_at || null,
-                                    strategy: (open.strategy || o.strategy || 'Scalping').trim()
+                                    strategy: (open.strategy || o.strategy || 'Unknown').trim()
                                 });
                                 open = null;
                             } else {
@@ -980,12 +1011,31 @@
                     return positions;
                 }
 
-                const positions = buildPositions(orders);
+                // Convert active positions to strategy data
+                function buildActivePositions(activePositions) {
+                    return activePositions.map(pos => ({
+                        symbol: pos.symbol,
+                        side: pos.side,
+                        qty: pos.size,
+                        entry: pos.entry_price,
+                        exit: pos.current_price || pos.entry_price,
+                        pnl: pos.pnl || 0,
+                        opened_at: pos.opened_at || pos.created_at || null,
+                        closed_at: null,
+                        strategy: pos.strategy || 'Unknown'
+                    }));
+                }
+
+                const closedPositions = buildClosedPositions(orders);
+                const activePositionsData = buildActivePositions(activePositions);
+                
+                // Combine all positions
+                const allPositions = [...closedPositions, ...activePositionsData];
 
                 // Group by strategy
                 const map = {};
-                positions.forEach(p => {
-                    const key = p.strategy || 'Scalping';
+                allPositions.forEach(p => {
+                    const key = p.strategy || 'Unknown';
                     if (!map[key]) map[key] = [];
                     map[key].push(p);
                 });
@@ -1005,6 +1055,11 @@
 
                 // Render table
                 tbody.innerHTML = '';
+                if (rows.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No strategy data available</td></tr>';
+                    return;
+                }
+                
                 rows.forEach(strategy => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
@@ -1020,6 +1075,7 @@
                 });
             } catch (e) {
                 console.error('Strategy table error:', e);
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Error loading strategy data</td></tr>';
             }
         }
         
@@ -1419,6 +1475,9 @@
                 { name: 'Total Trades', value: data.total_trades || 0, desc: 'Total number of trades executed' },
                 { name: 'Win Rate', value: `${(data.win_rate || 0).toFixed(1)}%`, desc: 'Percentage of profitable trades' },
                 { name: 'Total P&L', value: `$${(data.total_pnl || 0).toFixed(2)}`, desc: 'Total profit/loss' },
+                { name: 'Daily P&L', value: `$${(data.daily_pnl || 0).toFixed(2)}`, desc: 'Today\'s profit/loss' },
+                { name: 'Weekly P&L', value: `$${(data.weekly_pnl || 0).toFixed(2)}`, desc: 'This week\'s profit/loss' },
+                { name: 'Monthly P&L', value: `$${(data.monthly_pnl || 0).toFixed(2)}`, desc: 'This month\'s profit/loss' },
                 { name: 'Average Win', value: `$${(data.avg_win || 0).toFixed(2)}`, desc: 'Average profit per winning trade' },
                 { name: 'Average Loss', value: `$${(data.avg_loss || 0).toFixed(2)}`, desc: 'Average loss per losing trade' },
                 { name: 'Max Drawdown', value: `$${(data.max_drawdown || 0).toFixed(2)}`, desc: 'Maximum peak-to-trough decline' },
