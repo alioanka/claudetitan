@@ -476,7 +476,10 @@ class PaperTradingEngine:
                     # Generate signal
                     signal = self.strategy_ensemble.generate_ensemble_signal(data, symbol)
                     if not signal:
+                        logger.debug(f"No signal generated for {symbol}")
                         continue
+                    
+                    logger.info(f"Generated signal for {symbol}: {signal.strategy} - {signal.side} at {signal.entry_price}")
                     
                     # Store signal for ML training
                     self.signal_history.append({
@@ -515,6 +518,8 @@ class PaperTradingEngine:
                                 order_type=OrderType.MARKET,
                                 strategy=signal.strategy
                             )
+                            
+                            logger.info(f"Placed order for {symbol} with strategy: {signal.strategy}")
                             
                             if order and order.status == OrderStatus.FILLED:
                                 # Set stop loss and take profit

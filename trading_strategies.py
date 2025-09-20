@@ -405,8 +405,8 @@ class StrategyEnsemble:
             "MeanReversion": 0.3,
             "TrendFollowing": 0.3
         }
-        self.min_confidence = 0.7  # Higher confidence threshold
-        self.min_agreement = 0.6  # Higher agreement threshold (at least 2 out of 3 strategies must agree)
+        self.min_confidence = 0.5  # Lower confidence threshold for testing
+        self.min_agreement = 0.4  # Lower agreement threshold for testing
     
     def generate_ensemble_signal(self, data: pd.DataFrame, symbol: str) -> Optional[Signal]:
         """Generate signal using ensemble of strategies"""
