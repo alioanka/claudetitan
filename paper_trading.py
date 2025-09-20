@@ -188,6 +188,7 @@ class PaperTradingEngine:
                 'total_pnl': self.account.total_pnl,
                 'daily_pnl': self.account.daily_pnl
             })
+            logger.info(f"✅ Account saved to database: Balance=${self.account.balance:.2f}, Equity=${self.account.equity:.2f}")
         except Exception as e:
             logger.error(f"Error saving account to database: {e}")
     
@@ -211,6 +212,7 @@ class PaperTradingEngine:
                 'created_at': position.created_at,
                 'updated_at': position.updated_at
             })
+            logger.info(f"✅ Position saved to database: {position.symbol} {position.side} {position.size} (ID: {position_id})")
             return position_id
         except Exception as e:
             logger.error(f"Error saving position to database: {e}")
@@ -237,6 +239,7 @@ class PaperTradingEngine:
                 'filled_at': order.filled_at,
                 'order_metadata': order.metadata
             })
+            logger.info(f"✅ Order saved to database: {order.symbol} {order.side} {order.amount} (ID: {order_id})")
             return order_id
         except Exception as e:
             logger.error(f"Error saving order to database: {e}")

@@ -163,10 +163,12 @@ class DatabaseManager:
             if not position:
                 position = TradingPosition(**position_data)
                 session.add(position)
+                print(f"✅ Database: New position created - {position_data.get('symbol')} {position_data.get('side')}")
             else:
                 for key, value in position_data.items():
                     setattr(position, key, value)
                 position.updated_at = datetime.utcnow()
+                print(f"✅ Database: Position updated - {position_data.get('symbol')} {position_data.get('side')}")
             
             session.commit()
             return position.position_id
@@ -231,6 +233,7 @@ class DatabaseManager:
             order = TradingOrder(**order_data)
             session.add(order)
             session.commit()
+            print(f"✅ Database: Order saved - {order_data.get('symbol')} {order_data.get('side')} {order_data.get('amount')}")
             return order.order_id
     
     async def get_orders(self, limit: int = 100) -> List[Dict[str, Any]]:
