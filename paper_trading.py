@@ -247,7 +247,11 @@ class PaperTradingEngine:
         """Initialize the trading engine with data from database"""
         await self._load_account_from_db()
         await self._load_positions_from_db()
-        logger.info("Trading engine initialized with database data")
+        
+        # Update account metrics after loading
+        await self._update_account_metrics()
+        
+        logger.info(f"Trading engine initialized with database data: {len(self.account.positions)} positions, Balance=${self.account.balance:.2f}")
     
     def generate_order_id(self) -> str:
         """Generate unique order ID"""
@@ -456,8 +460,8 @@ class PaperTradingEngine:
                     unrealized_pnl_pct=0.0,
                     stop_loss=None,
                     take_profit=None,
-                    created_at=datetime.now(),
-                    updated_at=datetime.now(),
+                    created_at=datetime.utcnow(),  # Use UTC time
+                    updated_at=datetime.utcnow(),  # Use UTC time
                     strategy=order.strategy
                 )
                 self.account.positions.append(position)
@@ -733,21 +737,8 @@ class PaperTradingEngine:
     def get_performance_metrics(self) -> Dict:
         """Calculate performance metrics"""
         try:
-            # Get all trading data (closed trades + active positions)
-            all_trades = []
-            
-            # Add closed trades
-            all_trades.extend(self.trade_outcomes)
-            
-            # Add active positions as "trades"
-            for pos in self.account.positions:
-                all_trades.append({
-                    'symbol': pos.symbol,
-                    'side': pos.side,
-                    'pnl': pos.unrealized_pnl,
-                    'timestamp': pos.created_at,
-                    'strategy': pos.strategy
-                })
+            # Use only closed trades for performance metrics
+            all_trades = self.trade_outcomes.copy()
             
             if not all_trades:
                 return {
