@@ -44,6 +44,8 @@ sentry-sdk==1.38.0
 # Utilities
 pydantic==2.5.0
 pydantic-settings==2.1.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
 schedule==1.2.0
 python-multipart==0.0.6
 httpx==0.25.2

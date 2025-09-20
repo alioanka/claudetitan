@@ -14,6 +14,7 @@ from enum import Enum
 from risk_management import RiskManager, PositionRisk, PortfolioRisk
 from trading_strategies import Signal, StrategyEnsemble
 from market_data import MarketDataCollector
+from database import db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,8 @@ class PaperTradingEngine:
     
     def __init__(self, initial_balance: float = 10000.0):
         self.initial_balance = initial_balance
+        self.account_id = "default"
+        
         self.account = PaperAccount(
             balance=initial_balance,
             equity=initial_balance,
@@ -117,8 +120,134 @@ class PaperTradingEngine:
         # Cooldown mechanism to prevent overtrading
         self.last_trade_time = {}
         self.trade_cooldown = 300  # 5 minutes cooldown between trades for same symbol
+    
+    async def _load_account_from_db(self):
+        """Load account data from database"""
+        try:
+            account_data = await db_manager.get_account(self.account_id)
+            if account_data:
+                self.account.balance = account_data['balance']
+                self.account.equity = account_data['equity']
+                self.account.margin_used = account_data['margin_used']
+                self.account.free_margin = account_data['free_margin']
+                self.account.total_pnl = account_data['total_pnl']
+                self.account.daily_pnl = account_data['daily_pnl']
+                logger.info(f"Loaded account from database: Balance=${self.account.balance:.2f}")
+            else:
+                # Create new account in database
+                await db_manager.save_account({
+                    'account_id': self.account_id,
+                    'balance': self.account.balance,
+                    'equity': self.account.equity,
+                    'margin_used': self.account.margin_used,
+                    'free_margin': self.account.free_margin,
+                    'total_pnl': self.account.total_pnl,
+                    'daily_pnl': self.account.daily_pnl
+                })
+                logger.info("Created new account in database")
+        except Exception as e:
+            logger.error(f"Error loading account from database: {e}")
+    
+    async def _load_positions_from_db(self):
+        """Load positions from database"""
+        try:
+            positions_data = await db_manager.get_positions("open")
+            self.account.positions = []
+            
+            for pos_data in positions_data:
+                position = PaperPosition(
+                    symbol=pos_data['symbol'],
+                    side=pos_data['side'],
+                    size=pos_data['size'],
+                    entry_price=pos_data['entry_price'],
+                    current_price=pos_data['current_price'],
+                    unrealized_pnl=pos_data['unrealized_pnl'],
+                    unrealized_pnl_pct=pos_data['unrealized_pnl_pct'],
+                    stop_loss=pos_data['stop_loss'],
+                    take_profit=pos_data['take_profit'],
+                    created_at=pos_data['created_at'],
+                    updated_at=pos_data['updated_at'],
+                    strategy=pos_data['strategy']
+                )
+                self.account.positions.append(position)
+            
+            logger.info(f"Loaded {len(self.account.positions)} positions from database")
+        except Exception as e:
+            logger.error(f"Error loading positions from database: {e}")
+    
+    async def _save_account_to_db(self):
+        """Save account data to database"""
+        try:
+            await db_manager.save_account({
+                'account_id': self.account_id,
+                'balance': self.account.balance,
+                'equity': self.account.equity,
+                'margin_used': self.account.margin_used,
+                'free_margin': self.account.free_margin,
+                'total_pnl': self.account.total_pnl,
+                'daily_pnl': self.account.daily_pnl
+            })
+        except Exception as e:
+            logger.error(f"Error saving account to database: {e}")
+    
+    async def _save_position_to_db(self, position: PaperPosition):
+        """Save position to database"""
+        try:
+            position_id = str(uuid.uuid4())
+            await db_manager.save_position({
+                'position_id': position_id,
+                'symbol': position.symbol,
+                'side': position.side,
+                'size': position.size,
+                'entry_price': position.entry_price,
+                'current_price': position.current_price,
+                'unrealized_pnl': position.unrealized_pnl,
+                'unrealized_pnl_pct': position.unrealized_pnl_pct,
+                'stop_loss': position.stop_loss,
+                'take_profit': position.take_profit,
+                'strategy': position.strategy,
+                'status': 'open',
+                'created_at': position.created_at,
+                'updated_at': position.updated_at
+            })
+            return position_id
+        except Exception as e:
+            logger.error(f"Error saving position to database: {e}")
+            return None
+    
+    async def _save_order_to_db(self, order: PaperOrder):
+        """Save order to database"""
+        try:
+            order_id = str(uuid.uuid4())
+            await db_manager.save_order({
+                'order_id': order_id,
+                'symbol': order.symbol,
+                'side': order.side,
+                'order_type': order.type,
+                'amount': order.amount,
+                'price': order.price,
+                'stop_price': order.stop_price,
+                'status': order.status,
+                'filled_price': order.filled_price,
+                'filled_amount': order.filled_amount,
+                'fees': order.fees,
+                'strategy': order.strategy,
+                'created_at': order.created_at,
+                'filled_at': order.filled_at,
+                'metadata': order.metadata
+            })
+            return order_id
+        except Exception as e:
+            logger.error(f"Error saving order to database: {e}")
+            return None
         
         logger.info(f"Initialized paper trading engine with ${initial_balance:,.2f}")
+    
+    async def initialize(self):
+        """Initialize the trading engine with data from database"""
+        await self._load_account_from_db()
+        await self._load_positions_from_db()
+        logger.info("Trading engine initialized with database data")
     
     def generate_order_id(self) -> str:
         """Generate unique order ID"""
@@ -170,6 +299,9 @@ class PaperTradingEngine:
             elif order_type in [OrderType.STOP_LOSS, OrderType.TAKE_PROFIT]:
                 # Stop orders are checked during price updates
                 pass
+            
+            # Save order to database
+            await self._save_order_to_db(order)
             
             logger.info(f"Placed {order_type.value} order: {side.value} {amount} {symbol} at {price}")
             return order
@@ -329,6 +461,9 @@ class PaperTradingEngine:
                     strategy=order.strategy
                 )
                 self.account.positions.append(position)
+                
+                # Save position to database
+                await self._save_position_to_db(position)
             
             # Remove positions with zero size
             self.account.positions = [pos for pos in self.account.positions if pos.size > 0]
@@ -428,6 +563,25 @@ class PaperTradingEngine:
                 # Update balance with realized P&L (convert unrealized to realized)
                 realized_pnl = position.unrealized_pnl
                 self.account.balance += realized_pnl
+                
+                # Save trade to database
+                await db_manager.save_trade({
+                    'symbol': position.symbol,
+                    'side': position.side,
+                    'size': position.size,
+                    'entry_price': position.entry_price,
+                    'exit_price': order.filled_price,
+                    'pnl': realized_pnl,
+                    'pnl_pct': position.unrealized_pnl_pct,
+                    'strategy': position.strategy,
+                    'duration_minutes': int((datetime.now() - position.created_at).total_seconds() / 60),
+                    'opened_at': position.created_at,
+                    'closed_at': datetime.now(),
+                    'closing_reason': reason
+                })
+                
+                # Close position in database
+                await db_manager.close_position(position.position_id if hasattr(position, 'position_id') else None, order.filled_price, reason)
                 
                 # Record trade outcome for ML
                 self.trade_outcomes.append({

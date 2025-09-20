@@ -57,6 +57,9 @@ class TradingBot:
             self.risk_manager = RiskManager()
             self.strategy_ensemble = StrategyEnsemble()
             
+            # Initialize database
+            await self.trading_engine.initialize()
+            
             # Load existing ML models
             self.ml_trainer.load_models()
             

@@ -1813,35 +1813,40 @@
         // History functions
         async function loadHistory() {
             try {
-                const resp = await fetch('/api/enhanced/orders');
+                const resp = await fetch('/api/enhanced/trades');
                 const payload = await resp.json();
-                const orders = (payload && payload.orders) || [];
-                const positions = buildPositionsFromOrders(orders);
-                renderHistory(positions);
+                const trades = (payload && payload.trades) || [];
+                renderHistory(trades);
             } catch (e) {
                 console.error('loadHistory error', e);
             }
         }
 
-        function renderHistory(positions) {
+        function renderHistory(trades) {
             const tbody = document.getElementById('historyBody');
             if (!tbody) return;
 
-            if (!positions.length) {
-                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No position history available</td></tr>';
+            if (!trades.length) {
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No trade history available</td></tr>';
                 return;
             }
             tbody.innerHTML = '';
-            positions.forEach(p => {
-                const opened = p.opened_at ? new Date(p.opened_at) : null;
-                const closed = p.closed_at ? new Date(p.closed_at) : null;
+            trades.forEach(trade => {
+                const opened = trade.opened_at ? new Date(trade.opened_at) : null;
+                const closed = trade.closed_at ? new Date(trade.closed_at) : null;
                 let dur = 'N/A';
-                if (opened && closed) dur = ((closed - opened)/60000).toFixed(0) + ' min';
+                if (trade.duration_minutes) {
+                    const hours = Math.floor(trade.duration_minutes / 60);
+                    const minutes = trade.duration_minutes % 60;
+                    dur = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+                } else if (opened && closed) {
+                    dur = ((closed - opened)/60000).toFixed(0) + ' min';
+                }
 
-                const pnlClass = p.pnl >= 0 ? 'positive' : 'negative';
+                const pnlClass = trade.pnl >= 0 ? 'positive' : 'negative';
                 const row = document.createElement('tr');
-                row.className = p.pnl >= 0 ? 'table-success' : 'table-danger';
-                const reason = p.closing_reason || p.reason || inferCloseReason(p);
+                row.className = trade.pnl >= 0 ? 'table-success' : 'table-danger';
+                const reason = trade.closing_reason || 'Manual';
 
                 // Format dates with timezone
                 const openedStr = opened ? opened.toLocaleString('en-US', {
@@ -1865,17 +1870,17 @@
                 }) : 'N/A';
 
                 row.innerHTML = `
-                    <td>${p.symbol}</td>
-                    <td>${p.side}</td>
-                    <td>${Number(p.qty||0).toFixed(6)}</td>
-                    <td>$${Number(p.entry||0).toFixed(4)}</td>
-                    <td>$${Number(p.exit||0).toFixed(4)}</td>
-                    <td class="${pnlClass}">$${p.pnl.toFixed(2)}</td>
+                    <td>${trade.symbol}</td>
+                    <td>${trade.side}</td>
+                    <td>${Number(trade.size||0).toFixed(6)}</td>
+                    <td>$${Number(trade.entry_price||0).toFixed(4)}</td>
+                    <td>$${Number(trade.exit_price||0).toFixed(4)}</td>
+                    <td class="${pnlClass}">$${trade.pnl.toFixed(2)}</td>
                     <td>${dur}</td>
                     <td>${openedStr}</td>
                     <td>${closedStr}</td>
                     <td>${reason || '—'}</td>
-                    <td>${p.strategy || 'Unknown'}</td>
+                    <td>${trade.strategy || 'Unknown'}</td>
                 `;
                 tbody.appendChild(row);
             });

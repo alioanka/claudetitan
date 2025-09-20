@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 
 from config import settings
 from paper_trading import PaperTradingEngine
+from database import db_manager
 
 # Configure robust logging to a deterministic directory
 import os
@@ -189,139 +190,82 @@ async def get_account():
 
 @app.get("/api/enhanced/positions")
 async def get_positions():
-    """Get current positions with updated prices"""
+    """Get current positions from database"""
     try:
-        if not trading_engine:
-            raise HTTPException(status_code=500, detail="Trading engine not initialized")
+        # Get positions from database
+        positions_data = await db_manager.get_positions("open")
         
-        # Update position prices with current market data
-        updated_positions = []
-        for pos in trading_engine.account.positions:
+        # Update positions with current market prices
+        for position_data in positions_data:
             try:
-                # Get current price from market data
-                current_price = trading_engine.market_data_collector.get_current_price(pos.symbol)
+                current_price = await trading_engine.market_data_collector.get_current_price(position_data['symbol'])
                 if current_price:
-                    # Calculate current P&L
-                    if pos.side == 'long':
-                        current_pnl = (current_price - pos.entry_price) * pos.size
-                    else:  # short
-                        current_pnl = (pos.entry_price - current_price) * pos.size
+                    position_data['current_price'] = current_price
                     
-                    # Calculate P&L percentage
-                    pnl_percentage = (current_pnl / (pos.entry_price * pos.size)) * 100
-                    
-                    # Normalize opened time across possible attrs
-                    opened_raw = getattr(pos, 'opened_at', None) or getattr(pos, 'timestamp', None) or getattr(pos, 'created_at', None)
-                    closed_raw = getattr(pos, 'closed_at', None)
-
-                    timestamp_str = None
-                    duration_str = None
-                    if opened_raw:
-                        # DO NOT bake UTC+3 here—send ISO; browser will show local automatically
-                        try:
-                            timestamp_str = opened_raw.isoformat()
-                        except Exception:
-                            timestamp_str = str(opened_raw)
-
-                        # compute duration
-                        end = closed_raw or datetime.utcnow()
-                        try:
-                            duration = end - opened_raw
-                            hours, remainder = divmod(duration.total_seconds(), 3600)
-                            minutes, seconds = divmod(remainder, 60)
-                            duration_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
-                        except Exception:
-                            duration_str = None
-
-                    # Create updated position dict
-                    pos_dict = {
-                        'symbol': pos.symbol,
-                        'side': pos.side,
-                        'size': pos.size,
-                        'entry_price': pos.entry_price,
-                        'current_price': current_price,
-                        'pnl': current_pnl,
-                        'pnl_percentage': pnl_percentage,
-                        'opened_at': timestamp_str,   # <— NEW: canonical opened time
-                        'closed_at': closed_raw.isoformat() if closed_raw else None,
-                        'duration': duration_str
-                    }
-                else:
-                    # Fallback to original position data if price unavailable
-                    pos_dict = pos.__dict__.copy()
-                    
-                    # Normalize opened time across possible attrs for fallback too
-                    opened_raw = getattr(pos, 'opened_at', None) or getattr(pos, 'timestamp', None) or getattr(pos, 'created_at', None)
-                    closed_raw = getattr(pos, 'closed_at', None)
-
-                    if opened_raw:
-                        try:
-                            pos_dict['opened_at'] = opened_raw.isoformat()
-                        except Exception:
-                            pos_dict['opened_at'] = str(opened_raw)
-                        
-                        # compute duration
-                        end = closed_raw or datetime.utcnow()
-                        try:
-                            duration = end - opened_raw
-                            hours, remainder = divmod(duration.total_seconds(), 3600)
-                            minutes, seconds = divmod(remainder, 60)
-                            pos_dict['duration'] = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
-                        except Exception:
-                            pos_dict['duration'] = None
+                    # Recalculate P&L
+                    if position_data['side'] == "long":
+                        position_data['unrealized_pnl'] = (position_data['current_price'] - position_data['entry_price']) * position_data['size']
                     else:
-                        pos_dict['opened_at'] = None
-                        pos_dict['duration'] = None
-                
-                updated_positions.append(pos_dict)
+                        position_data['unrealized_pnl'] = (position_data['entry_price'] - position_data['current_price']) * position_data['size']
+                    
+                    position_data['unrealized_pnl_pct'] = position_data['unrealized_pnl'] / (position_data['entry_price'] * position_data['size'])
+                    
+                    # Update in database
+                    await db_manager.save_position(position_data)
             except Exception as e:
-                logger.error(f"Error updating position {pos.symbol}: {e}")
-                # Fallback to original position data
-                pos_dict = pos.__dict__.copy()
-                if hasattr(pos, 'timestamp'):
-                    pos_dict['timestamp'] = pos.timestamp.isoformat()
-                    pos_dict['duration'] = str(datetime.now() - pos.timestamp)
-                updated_positions.append(pos_dict)
+                logger.error(f"Error updating position {position_data['symbol']}: {e}")
         
-        return {"positions": updated_positions}
+        # Convert to JSON-serializable format
+        for pos in positions_data:
+            # Calculate duration
+            created_at = pos['created_at']
+            if isinstance(created_at, str):
+                created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+            duration = datetime.now() - created_at
+            duration_str = f"{int(duration.total_seconds() // 3600)}h {int((duration.total_seconds() % 3600) // 60)}m"
+            pos['duration'] = duration_str
+            pos['opened_at'] = created_at.isoformat()
+            pos['updated_at'] = pos['updated_at'].isoformat() if pos['updated_at'] else created_at.isoformat()
+            pos['strategy'] = pos.get('strategy', 'Unknown')
+        
+        return {"positions": positions_data}
     except Exception as e:
         logger.error(f"Error getting positions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"positions": []}
 
 @app.get("/api/enhanced/orders")
 async def get_orders():
-    """Get recent orders with enhanced information"""
+    """Get recent orders from database"""
     try:
-        if not trading_engine:
-            raise HTTPException(status_code=500, detail="Trading engine not initialized")
+        orders_data = await db_manager.get_orders(50)
         
-        # Get recent orders and enhance with PnL and duration info
-        enhanced_orders = []
-        for order in trading_engine.account.orders[-20:]:
-            order_dict = order.__dict__.copy()
-            
-            # Add timestamp formatting
-            if hasattr(order, 'timestamp'):
-                order_dict['timestamp'] = order.timestamp.isoformat()
-                order_dict['duration'] = str(datetime.now() - order.timestamp)
-            
-            # Add PnL information if available
-            if hasattr(order, 'pnl'):
-                order_dict['pnl'] = order.pnl
-                order_dict['pnl_percentage'] = (order.pnl / (order.price * order.size)) * 100 if order.price and order.size else 0
-
-            # bubble up close reason if the engine sets it anywhere
-            for k in ('closing_reason', 'close_reason', 'reason'):
-                if k in order_dict and order_dict[k]:
-                    order_dict['closing_reason'] = order_dict[k]
-                    break
-            
-            enhanced_orders.append(order_dict)
+        # Convert to JSON-serializable format
+        for order in orders_data:
+            order['created_at'] = order['created_at'].isoformat() if order['created_at'] else None
+            order['filled_at'] = order['filled_at'].isoformat() if order['filled_at'] else None
+            order['strategy'] = order.get('strategy', 'Unknown')
         
-        return {"orders": enhanced_orders}
+        return {"orders": orders_data}
     except Exception as e:
         logger.error(f"Error getting orders: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"orders": []}
+
+@app.get("/api/enhanced/trades")
+async def get_trades():
+    """Get closed trades from database"""
+    try:
+        trades_data = await db_manager.get_trades(100)
+        
+        # Convert to JSON-serializable format
+        for trade in trades_data:
+            trade['opened_at'] = trade['opened_at'].isoformat() if trade['opened_at'] else None
+            trade['closed_at'] = trade['closed_at'].isoformat() if trade['closed_at'] else None
+            trade['strategy'] = trade.get('strategy', 'Unknown')
+        
+        return {"trades": trades_data}
+    except Exception as e:
+        logger.error(f"Error getting trades: {e}")
+        return {"trades": []}
 
 @app.get("/api/enhanced/market-data")
 async def get_market_data():
