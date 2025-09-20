@@ -114,6 +114,10 @@ class PaperTradingEngine:
         self.signal_history = []
         self.trade_outcomes = []
         
+        # Cooldown mechanism to prevent overtrading
+        self.last_trade_time = {}
+        self.trade_cooldown = 300  # 5 minutes cooldown between trades for same symbol
+        
         logger.info(f"Initialized paper trading engine with ${initial_balance:,.2f}")
     
     def generate_order_id(self) -> str:
@@ -486,6 +490,13 @@ class PaperTradingEngine:
                         'market_data': data.iloc[-1].to_dict()
                     })
                     
+                    # Check cooldown period
+                    current_time = datetime.now().timestamp()
+                    last_trade = self.last_trade_time.get(symbol, 0)
+                    if current_time - last_trade < self.trade_cooldown:
+                        logger.debug(f"Symbol {symbol} in cooldown period, skipping trade")
+                        continue
+                    
                     # Check if we should open a position
                     current_positions = [asdict(pos) for pos in self.account.positions]
                     should_open, reason = self.risk_manager.should_open_position(
@@ -516,6 +527,9 @@ class PaperTradingEngine:
                                         pos.stop_loss = signal.stop_loss
                                         pos.take_profit = signal.take_profit
                                         break
+                                
+                                # Update cooldown time
+                                self.last_trade_time[symbol] = current_time
                                 
                                 logger.info(f"Opened {signal.side} position in {symbol}: {position_size} at {signal.entry_price}")
                     else:
@@ -565,23 +579,55 @@ class PaperTradingEngine:
         """Calculate performance metrics"""
         try:
             if not self.trade_outcomes:
-                return {}
+                return {
+                    'total_trades': 0,
+                    'winning_trades': 0,
+                    'losing_trades': 0,
+                    'win_rate': 0,
+                    'total_pnl': 0,
+                    'avg_win': 0,
+                    'avg_loss': 0,
+                    'max_drawdown': 0,
+                    'sharpe_ratio': 0,
+                    'current_equity': self.account.equity,
+                    'total_balance': self.account.balance,
+                    'available_balance': self.account.balance,
+                    'total_return': 0,
+                    'active_positions': len(self.account.positions),
+                    'initial_balance': self.initial_balance
+                }
             
             # Basic metrics
             total_trades = len(self.trade_outcomes)
             winning_trades = len([t for t in self.trade_outcomes if t['pnl'] > 0])
             losing_trades = len([t for t in self.trade_outcomes if t['pnl'] < 0])
             
-            win_rate = winning_trades / total_trades if total_trades > 0 else 0
+            win_rate = (winning_trades / total_trades) * 100 if total_trades > 0 else 0  # Convert to percentage
             
             # PnL metrics
             total_pnl = sum(t['pnl'] for t in self.trade_outcomes)
             avg_win = np.mean([t['pnl'] for t in self.trade_outcomes if t['pnl'] > 0]) if winning_trades > 0 else 0
             avg_loss = np.mean([t['pnl'] for t in self.trade_outcomes if t['pnl'] < 0]) if losing_trades > 0 else 0
             
-            # Risk metrics
-            max_drawdown = min([t['pnl'] for t in self.trade_outcomes]) if self.trade_outcomes else 0
-            sharpe_ratio = np.mean([t['pnl'] for t in self.trade_outcomes]) / np.std([t['pnl'] for t in self.trade_outcomes]) if len(self.trade_outcomes) > 1 else 0
+            # Calculate proper max drawdown (peak-to-trough decline)
+            max_drawdown = 0
+            if self.trade_outcomes:
+                cumulative_pnl = 0
+                peak = 0
+                for trade in self.trade_outcomes:
+                    cumulative_pnl += trade['pnl']
+                    peak = max(peak, cumulative_pnl)
+                    drawdown = peak - cumulative_pnl
+                    max_drawdown = max(max_drawdown, drawdown)
+            
+            # Calculate Sharpe ratio properly
+            if len(self.trade_outcomes) > 1:
+                returns = [t['pnl'] for t in self.trade_outcomes]
+                mean_return = np.mean(returns)
+                std_return = np.std(returns)
+                sharpe_ratio = mean_return / std_return if std_return > 0 else 0
+            else:
+                sharpe_ratio = 0
             
             # Calculate realistic total return based on P&L
             total_return = (total_pnl / self.initial_balance) * 100 if self.initial_balance > 0 else 0
@@ -597,6 +643,8 @@ class PaperTradingEngine:
                 'max_drawdown': max_drawdown,
                 'sharpe_ratio': sharpe_ratio,
                 'current_equity': self.account.equity,
+                'total_balance': self.account.balance,
+                'available_balance': self.account.balance,
                 'total_return': total_return,
                 'active_positions': len(self.account.positions),
                 'initial_balance': self.initial_balance

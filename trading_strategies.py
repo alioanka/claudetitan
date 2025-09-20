@@ -117,10 +117,10 @@ class ScalpingStrategy(BaseStrategy):
                 signal_strength = short_score
                 confidence = min(0.9, short_score + 0.1)
             
-            if side and signal_strength > 0.5:
-                # Calculate stop loss and take profit (more reasonable levels)
-                stop_loss = current_price * (0.95 if side == "long" else 1.05)  # 5% stop loss
-                take_profit = current_price * (1.10 if side == "long" else 0.90)  # 10% take profit
+            if side and signal_strength > 0.6:  # Higher threshold for better signals
+                # Calculate stop loss and take profit (more realistic for crypto)
+                stop_loss = current_price * (0.92 if side == "long" else 1.08)  # 8% stop loss
+                take_profit = current_price * (1.05 if side == "long" else 0.95)  # 5% take profit
                 
                 return Signal(
                     symbol=symbol,
@@ -227,15 +227,15 @@ class MeanReversionStrategy(BaseStrategy):
                 signal_strength = short_score
                 confidence = min(0.95, short_score + 0.2)
             
-            if side and signal_strength > 0.6:
+            if side and signal_strength > 0.7:  # Higher threshold for mean reversion
                 # Calculate stop loss and take profit
                 bb_width = bb_upper - bb_lower
                 if side == "long":
-                    stop_loss = current_price * 0.95  # 5% stop loss
-                    take_profit = bb_middle + (bb_width * 0.5)  # More conservative take profit
+                    stop_loss = current_price * 0.92  # 8% stop loss
+                    take_profit = bb_middle + (bb_width * 0.3)  # Conservative take profit
                 else:
-                    stop_loss = current_price * 1.05  # 5% stop loss
-                    take_profit = bb_middle - (bb_width * 0.5)  # More conservative take profit
+                    stop_loss = current_price * 1.08  # 8% stop loss
+                    take_profit = bb_middle - (bb_width * 0.3)  # Conservative take profit
                 
                 return Signal(
                     symbol=symbol,
@@ -340,15 +340,15 @@ class TrendFollowingStrategy(BaseStrategy):
                 signal_strength = short_score
                 confidence = min(0.9, short_score + 0.1)
             
-            if side and signal_strength > 0.5:
+            if side and signal_strength > 0.6:  # Higher threshold for trend following
                 # Calculate stop loss and take profit
-                atr = data['atr'].iloc[-1] if 'atr' in data.columns else current_price * 0.02
+                atr = data['atr'].iloc[-1] if 'atr' in data.columns else current_price * 0.03
                 if side == "long":
-                    stop_loss = current_price - (atr * 2)
-                    take_profit = current_price + (atr * 3)
+                    stop_loss = current_price - (atr * 1.5)  # Tighter stop loss
+                    take_profit = current_price + (atr * 2)  # More conservative take profit
                 else:
-                    stop_loss = current_price + (atr * 2)
-                    take_profit = current_price - (atr * 3)
+                    stop_loss = current_price + (atr * 1.5)  # Tighter stop loss
+                    take_profit = current_price - (atr * 2)  # More conservative take profit
                 
                 return Signal(
                     symbol=symbol,
@@ -405,8 +405,8 @@ class StrategyEnsemble:
             "MeanReversion": 0.3,
             "TrendFollowing": 0.3
         }
-        self.min_confidence = 0.6
-        self.min_agreement = 0.5  # Minimum percentage of strategies that must agree
+        self.min_confidence = 0.7  # Higher confidence threshold
+        self.min_agreement = 0.6  # Higher agreement threshold (at least 2 out of 3 strategies must agree)
     
     def generate_ensemble_signal(self, data: pd.DataFrame, symbol: str) -> Optional[Signal]:
         """Generate signal using ensemble of strategies"""
