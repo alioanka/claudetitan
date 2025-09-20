@@ -49,6 +49,7 @@ class PaperOrder:
     filled_price: Optional[float]
     filled_amount: Optional[float]
     fees: float
+    strategy: str = "Unknown"
     metadata: Dict = None
 
 @dataclass
@@ -65,6 +66,7 @@ class PaperPosition:
     take_profit: Optional[float]
     created_at: datetime
     updated_at: datetime
+    strategy: str = "Unknown"
     metadata: Dict = None
 
 @dataclass
@@ -126,7 +128,8 @@ class PaperTradingEngine:
         amount: float, 
         price: Optional[float] = None,
         order_type: OrderType = OrderType.MARKET,
-        stop_price: Optional[float] = None
+        stop_price: Optional[float] = None,
+        strategy: str = "Unknown"
     ) -> PaperOrder:
         """Place a paper trading order"""
         try:
@@ -148,6 +151,7 @@ class PaperTradingEngine:
                 filled_price=None,
                 filled_amount=None,
                 fees=0.0,
+                strategy=strategy,
                 metadata={}
             )
             
@@ -322,7 +326,8 @@ class PaperTradingEngine:
                     stop_loss=None,
                     take_profit=None,
                     created_at=datetime.now(),
-                    updated_at=datetime.now()
+                    updated_at=datetime.now(),
+                    strategy=order.strategy
                 )
                 self.account.positions.append(position)
             
@@ -416,10 +421,14 @@ class PaperTradingEngine:
                 symbol=position.symbol,
                 side=side,
                 amount=position.size,
-                order_type=OrderType.MARKET
+                order_type=OrderType.MARKET,
+                strategy=getattr(position, 'strategy', 'Manual')
             )
             
             if order and order.status == OrderStatus.FILLED:
+                # Update balance with realized P&L
+                self.account.balance += position.unrealized_pnl
+                
                 # Record trade outcome for ML
                 self.trade_outcomes.append({
                     'symbol': position.symbol,
@@ -496,7 +505,8 @@ class PaperTradingEngine:
                                 symbol=symbol,
                                 side=side,
                                 amount=position_size,
-                                order_type=OrderType.MARKET
+                                order_type=OrderType.MARKET,
+                                strategy=signal.strategy
                             )
                             
                             if order and order.status == OrderStatus.FILLED:

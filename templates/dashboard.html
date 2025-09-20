@@ -39,9 +39,21 @@
             color: #333 !important;
         }
         /* Specific fixes for account summary elements */
-        #accountBalance, #accountEquity, #totalPnL, #dailyPnL {
+        #accountBalance, #accountEquity {
             color: #333 !important;
             font-weight: bold !important;
+        }
+        #totalPnL, #dailyPnL {
+            font-weight: bold !important;
+        }
+        #totalPnL.positive, #dailyPnL.positive {
+            color: #28a745 !important;
+        }
+        #totalPnL.negative, #dailyPnL.negative {
+            color: #dc3545 !important;
+        }
+        #totalPnL.neutral, #dailyPnL.neutral {
+            color: #6c757d !important;
         }
         .text-muted {
             color: #666 !important;
@@ -52,6 +64,43 @@
         }
         .table th, .table td {
             color: #333 !important;
+        }
+        
+        /* Mobile responsiveness for tables */
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        @media (max-width: 768px) {
+            .table-responsive {
+                border: 1px solid #dee2e6;
+                border-radius: 0.375rem;
+            }
+            
+            .table {
+                margin-bottom: 0;
+                min-width: 800px; /* Ensure table doesn't get too compressed */
+            }
+            
+            .table th, .table td {
+                white-space: nowrap;
+                padding: 0.5rem;
+                font-size: 0.875rem;
+            }
+            
+            .position-card {
+                margin-bottom: 1rem;
+            }
+            
+            .position-card .row {
+                margin: 0;
+            }
+            
+            .position-card .col-md-2,
+            .position-card .col-md-3 {
+                margin-bottom: 0.5rem;
+            }
         }
         .positive { color: #28a745; }
         .negative { color: #dc3545; }
@@ -159,6 +208,11 @@
                         <li class="nav-item">
                             <a class="nav-link" href="#recent-positions" onclick="showSection('recent-positions')">
                                 <i class="fas fa-chart-line me-2"></i>Recent Positions
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#history" onclick="showSection('history')">
+                                <i class="fas fa-history me-2"></i>History
                             </a>
                         </li>
                         <li class="nav-item">
@@ -392,6 +446,38 @@
                             </thead>
                             <tbody id="positionsFromOrdersBody">
                                 <tr><td colspan="10" class="text-center text-muted">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- History Section -->
+                <div id="history-section" class="content-section" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4><i class="fas fa-history me-2"></i>Position History</h4>
+                        <button class="btn btn-primary btn-custom" onclick="loadHistory()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Qty</th>
+                                    <th>Entry</th>
+                                    <th>Exit</th>
+                                    <th>P&L</th>
+                                    <th>Duration</th>
+                                    <th>Opened</th>
+                                    <th>Closed</th>
+                                    <th>Reason</th>
+                                    <th>Strategy</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyBody">
+                                <tr><td colspan="11" class="text-center text-muted">Loading…</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1092,7 +1178,16 @@
                     dur = fmtDuration(end - openedAt);
                 }
 
-                const openTime = openedAt ? openedAt.toLocaleString() : 'N/A';
+                // Fix timezone display - convert UTC to local time
+                const openTime = openedAt ? openedAt.toLocaleString('en-US', {
+                    timeZone: 'Europe/Istanbul', // UTC+3
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                }) : 'N/A';
                 
                 positionCard.innerHTML = `
                     <div class="row align-items-center">
@@ -1120,11 +1215,14 @@
                         </div>
                     </div>
                     <div class="row mt-2">
-                        <div class="col-md-6">
+                        <div class="col-md-3">
                             <small class="text-muted"><strong>Opened:</strong> ${openTime}</small>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-3">
                             <small class="text-muted"><strong>Duration:</strong> ${dur}</small>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted"><strong>Strategy:</strong> ${position.strategy || 'Unknown'}</small>
                         </div>
                     </div>
                 `;
@@ -1651,6 +1749,77 @@
                 }
             } catch(_) {}
             return '';
+        }
+
+        // History functions
+        async function loadHistory() {
+            try {
+                const resp = await fetch('/api/enhanced/orders');
+                const payload = await resp.json();
+                const orders = (payload && payload.orders) || [];
+                const positions = buildPositionsFromOrders(orders);
+                renderHistory(positions);
+            } catch (e) {
+                console.error('loadHistory error', e);
+            }
+        }
+
+        function renderHistory(positions) {
+            const tbody = document.getElementById('historyBody');
+            if (!tbody) return;
+
+            if (!positions.length) {
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No position history available</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            positions.forEach(p => {
+                const opened = p.opened_at ? new Date(p.opened_at) : null;
+                const closed = p.closed_at ? new Date(p.closed_at) : null;
+                let dur = 'N/A';
+                if (opened && closed) dur = ((closed - opened)/60000).toFixed(0) + ' min';
+
+                const pnlClass = p.pnl >= 0 ? 'positive' : 'negative';
+                const row = document.createElement('tr');
+                row.className = p.pnl >= 0 ? 'table-success' : 'table-danger';
+                const reason = p.closing_reason || p.reason || inferCloseReason(p);
+
+                // Format dates with timezone
+                const openedStr = opened ? opened.toLocaleString('en-US', {
+                    timeZone: 'Europe/Istanbul',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                }) : 'N/A';
+                
+                const closedStr = closed ? closed.toLocaleString('en-US', {
+                    timeZone: 'Europe/Istanbul',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                }) : 'N/A';
+
+                row.innerHTML = `
+                    <td>${p.symbol}</td>
+                    <td>${p.side}</td>
+                    <td>${Number(p.qty||0).toFixed(6)}</td>
+                    <td>$${Number(p.entry||0).toFixed(4)}</td>
+                    <td>$${Number(p.exit||0).toFixed(4)}</td>
+                    <td class="${pnlClass}">$${p.pnl.toFixed(2)}</td>
+                    <td>${dur}</td>
+                    <td>${openedStr}</td>
+                    <td>${closedStr}</td>
+                    <td>${reason || '—'}</td>
+                    <td>${p.strategy || 'Unknown'}</td>
+                `;
+                tbody.appendChild(row);
+            });
         }
         
         // Pairs management functions

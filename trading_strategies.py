@@ -118,9 +118,9 @@ class ScalpingStrategy(BaseStrategy):
                 confidence = min(0.9, short_score + 0.1)
             
             if side and signal_strength > 0.5:
-                # Calculate stop loss and take profit
-                stop_loss = current_price * (0.998 if side == "long" else 1.002)
-                take_profit = current_price * (1.002 if side == "long" else 0.998)
+                # Calculate stop loss and take profit (more reasonable levels)
+                stop_loss = current_price * (0.95 if side == "long" else 1.05)  # 5% stop loss
+                take_profit = current_price * (1.10 if side == "long" else 0.90)  # 10% take profit
                 
                 return Signal(
                     symbol=symbol,
@@ -231,11 +231,11 @@ class MeanReversionStrategy(BaseStrategy):
                 # Calculate stop loss and take profit
                 bb_width = bb_upper - bb_lower
                 if side == "long":
-                    stop_loss = current_price * 0.98
-                    take_profit = bb_middle + (bb_width * 0.3)
+                    stop_loss = current_price * 0.95  # 5% stop loss
+                    take_profit = bb_middle + (bb_width * 0.5)  # More conservative take profit
                 else:
-                    stop_loss = current_price * 1.02
-                    take_profit = bb_middle - (bb_width * 0.3)
+                    stop_loss = current_price * 1.05  # 5% stop loss
+                    take_profit = bb_middle - (bb_width * 0.5)  # More conservative take profit
                 
                 return Signal(
                     symbol=symbol,
