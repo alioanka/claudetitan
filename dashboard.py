@@ -200,7 +200,18 @@ async def get_positions():
         for position_data in positions_data:
             try:
                 current_price = await trading_engine.market_data_collector.get_current_price(position_data['symbol'])
-                if current_price:
+                
+                # Fallback: try to get price from ticker data
+                if not current_price or current_price <= 0:
+                    try:
+                        ticker = await trading_engine.market_data_collector.get_ticker(position_data['symbol'])
+                        if ticker:
+                            current_price = ticker.get('last', ticker.get('close', 0))
+                    except Exception as e:
+                        logger.warning(f"Fallback price fetch failed for {position_data['symbol']}: {e}")
+                
+                if current_price and current_price > 0:
+                    old_price = position_data.get('current_price', position_data['entry_price'])
                     position_data['current_price'] = current_price
                     
                     # Recalculate P&L
@@ -211,8 +222,12 @@ async def get_positions():
                     
                     position_data['unrealized_pnl_pct'] = position_data['unrealized_pnl'] / (position_data['entry_price'] * position_data['size'])
                     
+                    logger.info(f"Updated {position_data['symbol']} price: {old_price} -> {current_price}, P&L: {position_data['unrealized_pnl']:.2f}")
+                    
                     # Update in database
                     await db_manager.save_position(position_data)
+                else:
+                    logger.warning(f"Could not get current price for {position_data['symbol']}, using entry price")
             except Exception as e:
                 logger.error(f"Error updating position {position_data['symbol']}: {e}")
         
@@ -303,8 +318,99 @@ async def get_performance():
         if not trading_engine:
             raise HTTPException(status_code=500, detail="Trading engine not initialized")
         
-        performance = trading_engine.get_performance_metrics()
-        return performance
+        # Get trades from database for accurate metrics
+        trades_data = await db_manager.get_trades(1000)  # Get more trades for better metrics
+        
+        # Calculate performance metrics from database trades
+        if not trades_data:
+            return {
+                'total_trades': 0,
+                'winning_trades': 0,
+                'losing_trades': 0,
+                'win_rate': 0,
+                'total_pnl': 0,
+                'avg_win': 0,
+                'avg_loss': 0,
+                'max_drawdown': 0,
+                'sharpe_ratio': 0,
+                'current_equity': trading_engine.account.equity,
+                'total_balance': trading_engine.account.balance,
+                'available_balance': trading_engine.account.balance,
+                'total_return': 0,
+                'active_positions': len(trading_engine.account.positions),
+                'initial_balance': trading_engine.initial_balance,
+                'daily_pnl': 0,
+                'weekly_pnl': 0,
+                'monthly_pnl': 0
+            }
+        
+        # Basic metrics
+        total_trades = len(trades_data)
+        winning_trades = len([t for t in trades_data if t['pnl'] > 0])
+        losing_trades = len([t for t in trades_data if t['pnl'] < 0])
+        
+        win_rate = (winning_trades / total_trades) * 100 if total_trades > 0 else 0
+        
+        # PnL metrics
+        total_pnl = sum(t['pnl'] for t in trades_data)
+        avg_win = sum(t['pnl'] for t in trades_data if t['pnl'] > 0) / winning_trades if winning_trades > 0 else 0
+        avg_loss = sum(t['pnl'] for t in trades_data if t['pnl'] < 0) / losing_trades if losing_trades > 0 else 0
+        
+        # Calculate max drawdown
+        max_drawdown = 0
+        if trades_data:
+            cumulative_pnl = 0
+            peak = 0
+            for trade in sorted(trades_data, key=lambda x: x['closed_at']):
+                cumulative_pnl += trade['pnl']
+                peak = max(peak, cumulative_pnl)
+                drawdown = peak - cumulative_pnl
+                max_drawdown = max(max_drawdown, drawdown)
+        
+        # Calculate Sharpe ratio
+        if len(trades_data) > 1:
+            returns = [t['pnl'] for t in trades_data]
+            mean_return = sum(returns) / len(returns)
+            variance = sum((r - mean_return) ** 2 for r in returns) / len(returns)
+            std_return = variance ** 0.5
+            sharpe_ratio = mean_return / std_return if std_return > 0 else 0
+        else:
+            sharpe_ratio = 0
+        
+        # Calculate daily, weekly, monthly P&L
+        now = datetime.now()
+        daily_trades = [t for t in trades_data if t['closed_at'] and (now - t['closed_at']).days < 1]
+        weekly_trades = [t for t in trades_data if t['closed_at'] and (now - t['closed_at']).days < 7]
+        monthly_trades = [t for t in trades_data if t['closed_at'] and (now - t['closed_at']).days < 30]
+        
+        daily_pnl = sum(t['pnl'] for t in daily_trades)
+        weekly_pnl = sum(t['pnl'] for t in weekly_trades)
+        monthly_pnl = sum(t['pnl'] for t in monthly_trades)
+        
+        # Calculate total return
+        total_return = (total_pnl / trading_engine.initial_balance) * 100 if trading_engine.initial_balance > 0 else 0
+        
+        return {
+            'total_trades': total_trades,
+            'winning_trades': winning_trades,
+            'losing_trades': losing_trades,
+            'win_rate': win_rate,
+            'total_pnl': total_pnl,
+            'avg_win': avg_win,
+            'avg_loss': avg_loss,
+            'max_drawdown': max_drawdown,
+            'sharpe_ratio': sharpe_ratio,
+            'current_equity': trading_engine.account.equity,
+            'total_balance': trading_engine.account.balance,
+            'available_balance': trading_engine.account.balance,
+            'total_return': total_return,
+            'active_positions': len(trading_engine.account.positions),
+            'initial_balance': trading_engine.initial_balance,
+            'daily_pnl': daily_pnl,
+            'weekly_pnl': weekly_pnl,
+            'monthly_pnl': monthly_pnl
+        }
+        
     except Exception as e:
         logger.error(f"Error getting performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))
