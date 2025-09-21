@@ -194,6 +194,7 @@ async def get_positions():
     try:
         # Get positions from database
         positions_data = await db_manager.get_positions("open")
+        logger.info(f"Retrieved {len(positions_data)} open positions from database")
         
         # Update positions with current market prices
         for position_data in positions_data:
@@ -215,13 +216,26 @@ async def get_positions():
             except Exception as e:
                 logger.error(f"Error updating position {position_data['symbol']}: {e}")
         
+        # Deduplicate positions by symbol (keep the latest one)
+        unique_positions = {}
+        for pos in positions_data:
+            symbol = pos['symbol']
+            if symbol not in unique_positions or pos['created_at'] > unique_positions[symbol]['created_at']:
+                unique_positions[symbol] = pos
+        
+        positions_data = list(unique_positions.values())
+        logger.info(f"After deduplication: {len(positions_data)} unique positions")
+        
         # Convert to JSON-serializable format
         for pos in positions_data:
             # Calculate duration
             created_at = pos['created_at']
             if isinstance(created_at, str):
                 created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-            duration = datetime.now() - created_at
+            
+            # Use UTC time for duration calculation to avoid timezone issues
+            now_utc = datetime.utcnow()
+            duration = now_utc - created_at
             duration_str = f"{int(duration.total_seconds() // 3600)}h {int((duration.total_seconds() % 3600) // 60)}m"
             pos['duration'] = duration_str
             pos['opened_at'] = created_at.isoformat()

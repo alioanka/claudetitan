@@ -69,6 +69,7 @@ class PaperPosition:
     created_at: datetime
     updated_at: datetime
     strategy: str = "Unknown"
+    position_id: Optional[str] = None
     metadata: Dict = None
 
 @dataclass
@@ -120,7 +121,7 @@ class PaperTradingEngine:
         
         # Cooldown mechanism to prevent overtrading
         self.last_trade_time = {}
-        self.trade_cooldown = 300  # 5 minutes cooldown between trades for same symbol
+        self.trade_cooldown = 30  # 30 seconds cooldown for scalping (was 5 minutes)
     
     async def _load_account_from_db(self):
         """Load account data from database"""
@@ -212,6 +213,8 @@ class PaperTradingEngine:
                 'created_at': position.created_at,
                 'updated_at': position.updated_at
             })
+            # Store the position_id back to the position object
+            position.position_id = position_id
             logger.info(f"✅ Position saved to database: {position.symbol} {position.side} {position.size} (ID: {position_id})")
             return position_id
         except Exception as e:
@@ -589,7 +592,8 @@ class PaperTradingEngine:
                 })
                 
                 # Close position in database
-                await db_manager.close_position(position.position_id if hasattr(position, 'position_id') else None, order.filled_price, reason)
+                if position.position_id:
+                    await db_manager.close_position(position.position_id, order.filled_price, reason)
                 
                 # Record trade outcome for ML
                 self.trade_outcomes.append({

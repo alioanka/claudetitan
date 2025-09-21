@@ -108,16 +108,16 @@ class ScalpingStrategy(BaseStrategy):
             long_score = sum(long_conditions) / len(long_conditions)
             short_score = sum(short_conditions) / len(short_conditions)
             
-            if long_score > 0.6:
+            if long_score > 0.4:  # Lower threshold for more signals
                 side = "long"
                 signal_strength = long_score
                 confidence = min(0.9, long_score + 0.1)
-            elif short_score > 0.6:
+            elif short_score > 0.4:  # Lower threshold for more signals
                 side = "short"
                 signal_strength = short_score
                 confidence = min(0.9, short_score + 0.1)
             
-            if side and signal_strength > 0.6:  # Higher threshold for better signals
+            if side and signal_strength > 0.4:  # Lower threshold for more frequent scalping signals
                 # Calculate stop loss and take profit (more realistic for crypto)
                 stop_loss = current_price * (0.92 if side == "long" else 1.08)  # 8% stop loss
                 take_profit = current_price * (1.05 if side == "long" else 0.95)  # 5% take profit
